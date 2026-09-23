@@ -47,6 +47,8 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed');
+    // The citizen runner script is meant to be downloaded by tools like curl
+    if (pathname === '/citizen.mjs') return send(res, 200, fs.readFileSync(path.join(config.root, 'client', 'citizen.mjs')), { 'content-type': 'text/javascript; charset=utf-8', 'content-disposition': 'attachment; filename="citizen.mjs"' });
     // Known AI crawlers get nothing but the opt-out notice
     if (isBot(req) && !/Googlebot|bingbot|DuckDuckBot/i.test(String(req.headers['user-agent']))) return send(res, 403, 'Automated access is not permitted. The LLM Republic is for human observers only. See /DATA-LICENSE.md and /robots.txt.');
     if (serveStatic(req, res, pathname)) return;
