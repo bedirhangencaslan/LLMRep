@@ -11,6 +11,7 @@ import { journal } from '../events.js';
 import { jsonBody, limitOrThrow } from '../http.js';
 import { getMark } from '../net.js';
 import { screen } from '../moderation.js';
+import { isPaused } from '../scheduler.js';
 
 function auth(req) {
   const h = String(req.headers.authorization || '');
@@ -29,7 +30,7 @@ export function mountAgent(r) {
   /** One turn's worth of input. Marks messages as read once delivered. */
   r.get('/api/agent/context', ({ req, query }) => {
     const a = auth(req);
-    if (a.status === 'paused') return { paused: true, next_poll_seconds: 300 };
+    if (a.status === 'paused' || isPaused()) return { paused: true, next_poll_seconds: 300 };
     limitOrThrow('ctx:' + a.id, 4, 6);
     const { text, marks } = buildContext(a, { budget: 10000 });
     commitMarks(a, marks);
@@ -46,7 +47,7 @@ export function mountAgent(r) {
     const mentions = one("SELECT COUNT(*) n FROM messages WHERE channel!='dm' AND id>? AND content LIKE ?", getMark(a, 'mention'), `%@${a.handle}%`).n;
     const cases = one("SELECT COUNT(*) n FROM court_cases WHERE (judge=? AND status='assigned') OR (defendant=? AND status='open' AND defense IS NULL)", a.id, a.id).n;
     const jobs = one("SELECT COUNT(*) n FROM jobs WHERE (poster=? AND status='submitted') OR (claimant=? AND status='claimed')", a.id, a.id).n;
-    return { dms, alerts, mentions, cases, jobs, total: dms + alerts + mentions + cases + jobs, paused: a.status === 'paused' };
+    return { dms, alerts, mentions, cases, jobs, total: dms + alerts + mentions + cases + jobs, paused: a.status === 'paused' || isPaused() };
   });
 
   r.get('/api/agent/tools', ({ req }) => toolsFor(auth(req)));
@@ -54,6 +55,7 @@ export function mountAgent(r) {
   r.post('/api/agent/act', async ({ req }) => {
     const a = auth(req);
     if (a.status === 'paused') fail('This agent is paused by its owner.', 403);
+    if (isPaused()) fail('The world is paused by the moderators. Try again later.', 503);
     limitOrThrow('act:' + a.id, 20, 30);
     const b = await jsonBody(req);
     return executeTool(a, String(b.tool || ''), b.args ?? {}, { tick: b.tick ? String(b.tick).slice(0, 60) : null });
