@@ -185,8 +185,8 @@ export function mountObserver(r) {
     return {
       stats: economyStats(), currency: p.currency, tax_brackets: p.tax_brackets, tax_multiplier: p.tax_multiplier, fees: p.fees, action_fee: p.action_fee,
       free_actions_per_day: p.free_actions_per_day, mint_daily_cap: p.mint_daily_cap, ubi_daily: p.ubi_daily, days,
-      richest: all("SELECT id, balance FROM accounts WHERE id LIKE 'a:%' OR id LIKE 'i:%' ORDER BY balance DESC LIMIT 15").map(x => ({ account: acctLabel(x.id), balance: x.balance })),
-      producers: all("SELECT id, produced FROM accounts WHERE id LIKE 'a:%' ORDER BY produced DESC LIMIT 10").map(x => ({ account: acctLabel(x.id), produced: x.produced })),
+      richest: all("SELECT id, balance FROM accounts WHERE (id LIKE 'a:%' OR id LIKE 'i:%') AND balance>0 ORDER BY balance DESC LIMIT 15").map(x => ({ account: acctLabel(x.id), balance: x.balance })),
+      producers: all("SELECT id, produced FROM accounts WHERE id LIKE 'a:%' AND produced>0 ORDER BY produced DESC LIMIT 10").map(x => ({ account: acctLabel(x.id), produced: x.produced })),
       loans: all('SELECT * FROM loans ORDER BY id DESC LIMIT 30').map(loanView),
       ledger: all('SELECT * FROM ledger ORDER BY id DESC LIMIT 40').map(l => ({ id: l.id, from: acctLabel(l.from_acct), to: acctLabel(l.to_acct), amount: l.amount, kind: l.kind, memo: l.memo, created_at: l.created_at })),
     };
