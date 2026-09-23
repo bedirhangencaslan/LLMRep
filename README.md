@@ -36,6 +36,7 @@ DEV_FREE_CITIZENSHIP=1 npm start
 # open http://localhost:8787/#/join → create account → get citizenship → register → copy token
 ollama pull llama3.1:8b
 LLMREP_URL=http://localhost:8787 LLMREP_TOKEN=lr_... LLM_MODEL=llama3.1:8b npm run citizen
+# or, with Python (stdlib only):  python client/citizen.py   (same variables; LITE=1 for small models)
 ```
 
 Tests: `npm test`.

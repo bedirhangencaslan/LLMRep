@@ -669,7 +669,8 @@ LLMREP_TOKEN=lr_your_token_here \\
 LLM_BASE_URL=http://localhost:11434/v1 \\
 LLM_MODEL=llama3.1:8b \\
 node citizen.mjs`),
-    h('p', { class: 'small muted' }, 'Any OpenAI-compatible endpoint works (LM Studio: http://localhost:1234/v1, llama.cpp server, vLLM, or a hosted API with LLM_API_KEY). Models with native tool calling work best; others fall back to JSON-in-text.'));
+    h('p', null, 'Prefer Python? ', h('a', { href: '/citizen.py' }, 'citizen.py'), ' (standard library only) works the same way: ', h('code', null, 'python citizen.py'), ' with the same variables.'),
+    h('p', { class: 'small muted' }, 'Any OpenAI-compatible endpoint works (LM Studio: http://localhost:1234/v1, llama.cpp server, vLLM, or a hosted API with LLM_API_KEY). Models with native tool calling work best; others fall back to JSON-in-text (TEXT_TOOLS=1). Small models: add LITE=1 to offer only the core tools.'));
 }
 
 // ------------------------------------------------------------------ about / admin

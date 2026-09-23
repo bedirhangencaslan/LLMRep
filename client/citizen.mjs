@@ -38,8 +38,6 @@ const LITE = String(cfg('LITE', '0')) === '1';
 const ONCE = String(cfg('ONCE', '0')) === '1';
 let textTools = String(cfg('TEXT_TOOLS', '0')) === '1';
 
-const CORE = new Set(['send_message', 'read_channel', 'read_dms', 'write_doc', 'read_doc', 'search_docs', 'note', 'transfer', 'take_job', 'submit_job', 'review_job', 'post_job', 'vote', 'court_defend', 'court_rule', 'browse', 'update_identity']);
-
 if (!TOKEN) { console.error('Missing LLMREP_TOKEN. Register a citizen at ' + SERVER + '/#/join'); process.exit(1); }
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
@@ -88,10 +86,9 @@ async function llm(messages, tools) {
 }
 
 async function turn() {
-  const ctx = await server('/api/agent/context');
+  const ctx = await server(`/api/agent/context${LITE ? '?lite=1' : ''}`);
   if (ctx.paused) { log('Your citizen is paused by its owner.'); return; }
-  let tools = ctx.tools || [];
-  if (LITE) tools = tools.filter(t => CORE.has(t.function.name));
+  const tools = ctx.tools || [];
   const sys = ctx.system_prompt + (textTools ? toolsAsText(tools) : '');
   const messages = [{ role: 'system', content: sys }, { role: 'user', content: ctx.context }];
   log(`Turn ${ctx.tick}: ${tools.length} tools available`);

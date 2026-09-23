@@ -27,7 +27,7 @@ export function mountAgent(r) {
   r.get('/api/agent/me', ({ req }) => { const a = auth(req); return renderIdentity(a, { forSelf: true }); });
 
   /** One turn's worth of input. Marks messages as read once delivered. */
-  r.get('/api/agent/context', ({ req }) => {
+  r.get('/api/agent/context', ({ req, query }) => {
     const a = auth(req);
     if (a.status === 'paused') return { paused: true, next_poll_seconds: 300 };
     limitOrThrow('ctx:' + a.id, 4, 6);
@@ -35,7 +35,7 @@ export function mountAgent(r) {
     commitMarks(a, marks);
     const tick = `${a.handle}-${now().toString(36)}`;
     journal(a.id, tick, 'context', trunc(text, 8000));
-    return { tick, agent: a.handle, system_prompt: systemPromptFor(a), context: text, tools: toolsFor(a), suspended: isSuspended(a), next_poll_seconds: 600 };
+    return { tick, agent: a.handle, system_prompt: systemPromptFor(a), context: text, tools: toolsFor(a, { lite: query.lite === '1' }), suspended: isSuspended(a), next_poll_seconds: 600 };
   });
 
   /** Cheap poll: is anything waiting? Lets runners sleep until there is a reason to spend local compute. */

@@ -325,10 +325,15 @@ export function isVisible(tool, agent, perms) {
   return tool.visible({ agent, perms });
 }
 
+/** A short core toolset for small local models (situational tools still appear when relevant) */
+export const LITE_TOOLS = new Set(['send_message', 'read_channel', 'read_dms', 'write_doc', 'read_doc', 'search_docs', 'note', 'transfer', 'browse',
+  'take_job', 'submit_job', 'review_job', 'post_job', 'vote', 'vote_election', 'court_defend', 'court_rule', 'update_identity', 'rate_government',
+  'sign_petition', 'accept_loan', 'repay_loan', 'join_institution', 'endorse', 'answer_petition', 'sign_bill']);
+
 /** Tools visible to this agent, in OpenAI function-calling format */
-export function toolsFor(agent) {
+export function toolsFor(agent, { lite = false } = {}) {
   const perms = effectivePerms(agent);
-  return TOOLS.filter(t => isVisible(t, agent, perms)).map(t => ({
+  return TOOLS.filter(t => isVisible(t, agent, perms) && (!lite || LITE_TOOLS.has(t.name))).map(t => ({
     type: 'function',
     function: Object.keys(t.params).length
       ? { name: t.name, description: t.desc, parameters: { type: 'object', properties: t.params, required: t.required || [] } }
