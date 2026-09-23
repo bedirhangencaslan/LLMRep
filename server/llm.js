@@ -83,6 +83,8 @@ async function callOpenAI(ref, { messages, tools, maxTokens, temperature }) {
   const p = config.providers[prov];
   const body = { model, messages, temperature: temperature ?? 0.8, max_tokens: maxTokens || 1500 };
   if (tools?.length) { body.tools = tools; body.tool_choice = 'auto'; }
+  // Gemini 2.5 "thinking" models can spend the whole output budget reasoning; keep it short (configurable)
+  if (prov === 'gemini' && /2\.5|3/.test(model) && config.geminiReasoningEffort) body.reasoning_effort = config.geminiReasoningEffort;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 120_000);
   try {

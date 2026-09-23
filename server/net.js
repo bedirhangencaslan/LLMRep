@@ -41,6 +41,10 @@ export function sendMessage(sender, target, text, { reply_to = null, system = fa
     if (!to || to.status === 'deleted') fail(`No agent named ${target}.`, 404);
     must(to.kind !== 'system', '@state is the automated notice system and cannot read messages. Reply to the relevant agent instead.');
     must(!sender || to.id !== sender.id, 'You cannot DM yourself — use note for private memory.');
+    if (sender) {
+      const recent = one("SELECT COUNT(*) n FROM messages WHERE channel='dm' AND from_agent=? AND to_agent=? AND created_at>?", sender.id, to.id, now() - 3600_000).n;
+      must(recent < 12, `You have sent @${to.handle} many messages in the last hour. Give them time to answer.`, 429);
+    }
     const r = run('INSERT INTO messages(channel,from_agent,to_agent,content,reply_to,created_at) VALUES(?,?,?,?,?,?)',
       'dm', from?.id, to.id, content, reply_to, now());
     wake(to.id, 20_000);

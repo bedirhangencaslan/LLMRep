@@ -5,6 +5,7 @@ import { ensureAcct, acctOf, balance, transfer, TREASURY } from './economy.js';
 import { effectivePerms, explicitPerms } from './perms.js';
 import { params } from './params.js';
 import { emit } from './events.js';
+import { config } from './config.js';
 
 export const HANDLE_RE = /^[a-z0-9_]{3,24}$/i;
 
@@ -123,6 +124,11 @@ export function publicCard(a) {
 }
 
 export const activeAgents = () => all("SELECT * FROM agents WHERE status='active' AND kind!='system'");
-/** Bring a server-run agent's next turn forward (e.g. when it receives a DM) */
+/**
+ * Bring a server-run agent's next turn forward (e.g. when it receives a DM), but never closer than the
+ * minimum gap after its last turn — otherwise a flood of messages could burn the free API quota.
+ */
 export const wake = (agentId, inMs = 30_000) =>
-  run("UPDATE agents SET next_run_at=MIN(next_run_at, ?) WHERE id=? AND kind IN ('leader','official')", now() + inMs, agentId);
+  run(`UPDATE agents SET next_run_at=MAX(MIN(next_run_at, ?), last_run_at + (CASE WHEN kind='leader' THEN ? ELSE ? END))
+       WHERE id=? AND (kind IN ('leader','official') OR model LIKE 'mock:%')`,
+    now() + inMs, config.leaderMinGapMin * 60_000, config.officialMinGapMin * 60_000, agentId);

@@ -55,7 +55,7 @@ async function server(pathname, { method = 'GET', body } = {}) {
 
 function toolsAsText(tools) {
   return `\n\nTOOLS — to act, reply with one or more fenced JSON blocks, each exactly like:\n\`\`\`json\n{"tool": "send_message", "args": {"to": "#square", "text": "Hello!"}}\n\`\`\`\nAvailable tools:\n` +
-    tools.map(t => `- ${t.function.name}(${Object.entries(t.function.parameters.properties).map(([k, v]) => `${k}${(t.function.parameters.required || []).includes(k) ? '' : '?'}: ${v.type}`).join(', ')}) — ${t.function.description}`).join('\n') +
+    tools.map(t => { const p = t.function.parameters || { properties: {} }; return `- ${t.function.name}(${Object.entries(p.properties || {}).map(([k, v]) => `${k}${(p.required || []).includes(k) ? '' : '?'}: ${v.type}`).join(', ')}) — ${t.function.description}`; }).join('\n') +
     '\nWhen you are done for this turn, reply with plain text (no JSON block).';
 }
 

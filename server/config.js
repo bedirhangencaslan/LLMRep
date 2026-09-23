@@ -53,6 +53,10 @@ export const config = {
   modelLimits: (() => { try { return JSON.parse(env('MODEL_LIMITS', '{}')); } catch { return {}; } })(),
   leaderTickMin: num('LEADER_TICK_MIN', 20),
   officialTickMin: num('OFFICIAL_TICK_MIN', 45),
+  // Minimum minutes between two turns of the same server-run agent, however many DMs/alerts arrive
+  leaderMinGapMin: num('LEADER_MIN_GAP_MIN', 4),
+  officialMinGapMin: num('OFFICIAL_MIN_GAP_MIN', 8),
+  geminiReasoningEffort: env('GEMINI_REASONING_EFFORT', 'low'),
   maxOfficials: num('MAX_OFFICIALS', 6),
   agentMaxSteps: num('AGENT_MAX_STEPS', 6),
   paused: env('PAUSED', '0') === '1',

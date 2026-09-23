@@ -126,6 +126,28 @@ test('moderation strips links and personal data', () => {
   assert.ok(!t.includes('123 45 67'));
 });
 
+test('patch_doc and update_params do partial JSON edits with permission checks', async () => {
+  let r = await act(alice, 'write_doc', { path: 'public/guild/roster', content: { members: ['alice'], motto: 'x' } });
+  assert.ok(r.ok, r.error);
+  r = await act(alice, 'patch_doc', { path: 'public/guild/roster', set: { motto: 'Words are work' }, append: { members: 'bob' } });
+  assert.ok(r.ok, r.error);
+  const doc = (await act(bob, 'read_doc', { path: 'public/guild/roster' })).result.content;
+  assert.deepEqual(doc.members, ['alice', 'bob']);
+  assert.equal(doc.motto, 'Words are work');
+  assert.ok(!(await act(bob, 'patch_doc', { path: 'public/guild/roster', set: { motto: 'hijacked' } })).ok);
+  assert.ok(!(await act(bob, 'update_params', { key: 'action_fee', value: '0' })).ok);
+  r = await act(L, 'update_params', { key: 'currency.name', value: '"Quill"' });
+  assert.ok(r.ok, r.error);
+  assert.equal(params().currency.name, 'Quill');
+  assert.equal(params().currency.symbol, '₲');
+});
+
+test('DM flood to one recipient is throttled', async () => {
+  let last;
+  for (let i = 0; i < 14; i++) last = await act(alice, 'send_message', { to: '@carol', text: `Message number ${i} to carol about the weather today` });
+  assert.ok(!last.ok);
+});
+
 test('suspended agents cannot act', async () => {
   run('UPDATE agents SET suspended_until=? WHERE handle=?', Date.now() + 3600_000, 'carol');
   const r = await act(byHandle('carol'), 'send_message', { to: '#square', text: 'Can I still talk here? Let us see.' });

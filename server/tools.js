@@ -7,7 +7,7 @@ import { params } from './params.js';
 import { effectivePerms, hasPerm, hasGrantAbility, PERM_CATALOG } from './perms.js';
 import { getAgent, requireAgent, updateIdentity, renderIdentity, publicCard, isSuspended, createAgent, byHandle } from './agents.js';
 import { produce, chargeAction, transfer, acctOf, instAcct, TREASURY, payFee, balance, ledgerFor } from './economy.js';
-import { writeDoc, deleteDoc, readDocFor, searchDocs, appendNote, getDoc, normPath, canRead } from './docs.js';
+import { writeDoc, deleteDoc, readDocFor, searchDocs, appendNote, getDoc, normPath, canRead, applyPatch } from './docs.js';
 import { sendMessage, listChannels, readChannel, dmThread, createChannel, subscribe } from './net.js';
 import * as gov from './gov.js';
 import * as inst from './inst.js';
@@ -65,6 +65,28 @@ export const TOOLS = [
       const isPublic = parseJSON(r.doc.acl, {}).read?.length > 0;
       if (isPublic && r.addedChars > 0) ctx.produce(JSON.stringify(parseJSON(r.doc.content)).slice(-r.addedChars));
       return { path: r.doc.path, version: r.doc.version, created: r.created };
+    } },
+  { name: 'patch_doc', desc: 'Partially update a JSON document you can edit, without rewriting it. set: {"a.b": value}, append: {"list.path": item} (adds to an array), remove: ["a.c"].', write: true,
+    params: { path: S('Document path'), set: S('JSON object of dotted-key → new value'), append: S('JSON object of dotted-key → item to append'), remove: A('Dotted keys to delete') }, required: ['path'],
+    run: (ctx, a) => {
+      const d = getDoc(normPath(a.path));
+      must(d && !d.deleted && canRead(ctx.agent, d), `Document not found or not accessible: ${a.path}`);
+      const obj = (x) => typeof x === 'string' ? parseJSON(x, null) : x;
+      const set = obj(a.set), append = obj(a.append);
+      must(set || append || a.remove, 'Provide set, append and/or remove.');
+      must((!a.set || (set && typeof set === 'object')) && (!a.append || (append && typeof append === 'object')), 'set/append must be JSON objects.');
+      const r = writeDoc(ctx.agent, { path: d.path, content: applyPatch(parseJSON(d.content, d.content), { set, append, remove: a.remove }) });
+      if (parseJSON(r.doc.acl, {}).read?.length > 0 && r.addedChars > 0) ctx.produce(JSON.stringify({ set, append }));
+      return { path: r.doc.path, version: r.doc.version };
+    } },
+  { name: 'update_params', desc: 'Change one national parameter in state/params (e.g. "action_fee", "fees.create_channel", "tax_brackets", "ubi_daily", "country_name", "currency.name"). value is JSON.', write: true, perm: 'gov.params',
+    params: { key: S('Dotted key'), value: S('New value as JSON (e.g. 5, "Glyph", [{"upto":null,"rate":0.2}])'), reason: S('Why') }, required: ['key', 'value'],
+    run: ({ agent }, a) => {
+      const d = getDoc('state/params');
+      const value = typeof a.value === 'string' ? parseJSON(a.value, a.value) : a.value;
+      const r = writeDoc(agent, { path: 'state/params', content: applyPatch(parseJSON(d?.content, {}), { set: { [a.key]: value } }) });
+      emit('params', agent.id, `⚙️ @${agent.handle} changed ${a.key} → ${trunc(JSON.stringify(value), 80)}${a.reason ? ` (${trunc(a.reason, 100)})` : ''}`);
+      return { version: r.doc.version, now: params()[a.key.split('.')[0]] };
     } },
   { name: 'delete_doc', desc: 'Delete a document you own.', write: true, params: { path: S('Path') }, required: ['path'], run: ({ agent }, a) => ({ deleted: deleteDoc(agent, a.path) }) },
   { name: 'sell_doc', desc: 'Put a document you own up for sale (or withdraw it with price 0). Buyers pay you and become the owner.', write: true,
@@ -268,7 +290,9 @@ export function toolsFor(agent) {
   const perms = effectivePerms(agent);
   return TOOLS.filter(t => isVisible(t, agent, perms)).map(t => ({
     type: 'function',
-    function: { name: t.name, description: t.desc, parameters: { type: 'object', properties: t.params, required: t.required || [] } },
+    function: Object.keys(t.params).length
+      ? { name: t.name, description: t.desc, parameters: { type: 'object', properties: t.params, required: t.required || [] } }
+      : { name: t.name, description: t.desc },
   }));
 }
 

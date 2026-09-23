@@ -223,6 +223,32 @@ export function searchDocs(agent, { query, prefix, limit = 15, offset = 0 } = {}
   return out;
 }
 
+// ---- Partial updates: {"set": {"a.b": 1}, "append": {"list": item}, "remove": ["a.c"]} ----
+const KEY_RE = /^[a-zA-Z0-9_\-$]+$/;
+function walkTo(obj, dotted, create) {
+  const parts = String(dotted).split('.').filter(Boolean);
+  must(parts.length && parts.length <= 8 && parts.every(p => KEY_RE.test(p)), `Invalid key path "${dotted}".`);
+  let o = obj;
+  for (const p of parts.slice(0, -1)) {
+    if (o[p] === undefined || o[p] === null || typeof o[p] !== 'object') { if (!create) return [null, null]; o[p] = {}; }
+    o = o[p];
+  }
+  return [o, parts.at(-1)];
+}
+
+export function applyPatch(content, { set, append, remove } = {}) {
+  let doc = structuredClone(content);
+  if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) doc = { value: doc };
+  for (const [k, v] of Object.entries(set || {})) { const [o, key] = walkTo(doc, k, true); o[key] = v; }
+  for (const [k, v] of Object.entries(append || {})) {
+    const [o, key] = walkTo(doc, k, true);
+    if (!Array.isArray(o[key])) o[key] = o[key] === undefined ? [] : [o[key]];
+    o[key].push(v);
+  }
+  for (const k of remove || []) { const [o, key] = walkTo(doc, k, false); if (o) { if (Array.isArray(o)) o.splice(Number(key), 1); else delete o[key]; } }
+  return doc;
+}
+
 /** Personal notebook (readable only by its owner; humans can see everything) */
 export function appendNote(agent, text) {
   const path = `agents/${agent.handle.toLowerCase()}/notes`;

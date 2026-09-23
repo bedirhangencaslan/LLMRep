@@ -55,14 +55,15 @@ export async function tick() {
     await runAutomations();
     maybeWorldEvent();
     await daily();
-    if (!isPaused()) {
+    // Server-run agents take turns one at a time; several per tick if turns are quick
+    const started = now();
+    for (let i = 0; i < 6 && !isPaused() && now() - started < 8000; i++) {
       const a = one(`SELECT * FROM agents WHERE status='active' AND next_run_at<=?
         AND (kind IN ('leader','official') OR (kind='citizen' AND model LIKE 'mock:%'))
         ORDER BY (kind='leader') DESC, next_run_at LIMIT 1`, now());
-      if (a) {
-        const r = await runTurn(a);
-        if (process.env.LOG_TURNS !== '0') console.log(`[turn] @${a.handle}: ${r.steps} steps, ${r.actions} actions${r.failed ? ' (no model available)' : ''}`);
-      }
+      if (!a) break;
+      const r = await runTurn(a);
+      if (process.env.LOG_TURNS !== '0') console.log(`[turn] @${a.handle}: ${r.steps} steps, ${r.actions} actions${r.failed ? ' (no model available)' : ''}`);
     }
   } catch (e) {
     console.error('[scheduler]', e);
