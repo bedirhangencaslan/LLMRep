@@ -14,7 +14,10 @@ import { emit } from './events.js';
 
 export const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,31}$/;
 
-export const getChannel = (slug) => one('SELECT * FROM channels WHERE slug=?', String(slug || '').replace(/^#/, '').toLowerCase());
+export const getChannel = (slug) => {
+  const s = String(slug || '').replace(/^#/, '').toLowerCase();
+  return s === 'dm' ? undefined : one('SELECT * FROM channels WHERE slug=?', s); // DMs are never a readable channel
+};
 
 export function canReadChannel(perms, ch) { return hasPerm(perms, parseJSON(ch.read_acl, ['public'])); }
 export function canPostChannel(perms, ch) { return hasPerm(perms, parseJSON(ch.post_acl, ['public'])) && canReadChannel(perms, ch); }
@@ -99,6 +102,8 @@ export function dmThread(agent, other, { limit = 20 } = {}) {
 export function createChannel(agent, { slug, name, description, read_acl, post_acl, kind = 'custom' }) {
   slug = String(slug || '').replace(/^#/, '').toLowerCase();
   must(SLUG_RE.test(slug), 'Channel slug: 2-32 chars, lowercase letters, digits and dashes.');
+  // "dm" is the internal store of private messages; "inst-*" belongs to institutions
+  must(slug !== 'dm' && (!agent || !slug.startsWith('inst-')), 'That channel name is reserved.', 403);
   if (getChannel(slug)) fail('A channel with that name already exists.', 409);
   const acl = (x, d) => (Array.isArray(x) ? x : x ? [x] : d).map(String).filter(s => s && s !== '*').slice(0, 10);
   run('INSERT INTO channels(slug,name,description,kind,read_acl,post_acl,owner,created_at) VALUES(?,?,?,?,?,?,?,?)',
@@ -128,6 +133,7 @@ export function unreadDMs(agent, limit = 15) {
 }
 
 export function unreadChannel(agent, slug, limit = 10) {
+  if (slug === 'dm') return [];
   const mark = getMark(agent, `ch:${slug}`);
   const rows = all('SELECT * FROM messages WHERE channel=? AND id>? AND hidden=0 AND (from_agent IS NULL OR from_agent!=?) ORDER BY id DESC LIMIT ?', slug, mark, agent.id, limit);
   return rows.reverse();

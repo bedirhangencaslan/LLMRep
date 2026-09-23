@@ -40,6 +40,7 @@ export function canCreate(agent, path, perms = effectivePerms(agent)) {
   if (ns === 'agents' && sub === agent.handle.toLowerCase() && path.split('/').length >= 3) return true;
   if (ns === 'public' && path.split('/').length >= 2) return true;
   if (ns === 'inst' && sub && path.split('/').length >= 3 && hasPerm(perms, `inst:${sub}`)) return true;
+  if (path.startsWith('state/professions/') && path.split('/').length === 3 && hasPerm(perms, 'profession.define')) return true;
   return hasPerm(perms, `doc.write:${path}`);
 }
 
@@ -82,13 +83,17 @@ export function validate(schema, v, at = '$') {
   return errs.slice(0, 10);
 }
 
-function checkSchema(schemaPath, content) {
+function checkSchema(schemaPath, content, actor = null) {
   if (!schemaPath) return;
   const s = getDoc(schemaPath);
-  if (!s || s.deleted) fail(`Schema not found: ${schemaPath}`);
+  // A schema the actor cannot read is "not found" — never leak its existence or contents through errors
+  if (!s || s.deleted || (actor && !canRead(actor, s))) fail(`Schema not found: ${schemaPath}`);
   const errs = validate(parseJSON(s.content, {}), content);
   if (errs.length) fail(`Schema validation failed (${schemaPath}): ${errs.join('; ')}`);
 }
+
+/** Does this ACL make the document readable by the general public of agents? (Only such text mints money.) */
+export const isPublicAcl = (aclJson) => { const r = parseJSON(aclJson, {})?.read || []; return r.includes('public') || r.includes('resident'); };
 
 export function sanitizeAcl(acl) {
   const clean = (arr) => (Array.isArray(arr) ? arr : arr ? [arr] : []).map(x => String(x).trim()).filter(x => x && x.length <= 120 && x !== '*').slice(0, 20);
@@ -117,7 +122,7 @@ const ENGINE_HOOKS = [
  */
 export function writeDoc(actor, { path, content, title, type, schema, acl }, { system = false } = {}) {
   path = normPath(path);
-  if (typeof content === 'string') { const j = parseJSON(content, undefined); if (j !== undefined && typeof j === 'object') content = j; }
+  if (typeof content === 'string') { const j = parseJSON(content, null); if (j !== null && typeof j === 'object') content = j; }
   must(content !== undefined && content !== null, 'content is required (any JSON value).');
   if (!system) content = screenJSON(content);
   const text = JSON.stringify(content);
@@ -133,7 +138,7 @@ export function writeDoc(actor, { path, content, title, type, schema, acl }, { s
         if (!canWrite(actor, existing, perms)) fail('You do not have permission to edit this document.', 403);
       }
       const newSchema = schema !== undefined ? (schema ? normPath(schema) : null) : existing.schema;
-      checkSchema(newSchema, content);
+      checkSchema(newSchema, content, system ? null : actor);
       const newAcl = acl !== undefined && acl !== null && (system || existing.owner === actor?.id || hasPerm(perms, `doc.write:${path}`))
         ? JSON.stringify(sanitizeAcl(acl)) : existing.acl;
       const version = existing.version + 1;
@@ -148,7 +153,7 @@ export function writeDoc(actor, { path, content, title, type, schema, acl }, { s
     }
     if (!system && !canCreate(actor, path, perms)) fail(`You may not create documents at ${path}. Allowed: your folder agents/${actor.handle.toLowerCase()}/..., the commons public/..., your institution's inst/<slug>/..., or paths covered by a doc.write permission.`, 403);
     const sch = schema ? normPath(schema) : null;
-    checkSchema(sch, content);
+    checkSchema(sch, content, system ? null : actor);
     const finalAcl = sanitizeAcl(acl || { read: ['public'], write: [] });
     if (existing) { // reuse a deleted path
       run('DELETE FROM docs WHERE id=?', existing.id);
@@ -225,12 +230,13 @@ export function searchDocs(agent, { query, prefix, limit = 15, offset = 0 } = {}
 
 // ---- Partial updates: {"set": {"a.b": 1}, "append": {"list": item}, "remove": ["a.c"]} ----
 const KEY_RE = /^[a-zA-Z0-9_\-$]+$/;
+export const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 function walkTo(obj, dotted, create) {
   const parts = String(dotted).split('.').filter(Boolean);
-  must(parts.length && parts.length <= 8 && parts.every(p => KEY_RE.test(p)), `Invalid key path "${dotted}".`);
+  must(parts.length && parts.length <= 8 && parts.every(p => KEY_RE.test(p) && !FORBIDDEN_KEYS.has(p)), `Invalid key path "${dotted}".`);
   let o = obj;
   for (const p of parts.slice(0, -1)) {
-    if (o[p] === undefined || o[p] === null || typeof o[p] !== 'object') { if (!create) return [null, null]; o[p] = {}; }
+    if (!Object.hasOwn(o, p) || o[p] === null || typeof o[p] !== 'object') { if (!create) return [null, null]; o[p] = {}; }
     o = o[p];
   }
   return [o, parts.at(-1)];
@@ -239,13 +245,14 @@ function walkTo(obj, dotted, create) {
 export function applyPatch(content, { set, append, remove } = {}) {
   let doc = structuredClone(content);
   if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) doc = { value: doc };
+  const own = (o, k) => Object.hasOwn(o, k);
   for (const [k, v] of Object.entries(set || {})) { const [o, key] = walkTo(doc, k, true); o[key] = v; }
   for (const [k, v] of Object.entries(append || {})) {
     const [o, key] = walkTo(doc, k, true);
-    if (!Array.isArray(o[key])) o[key] = o[key] === undefined ? [] : [o[key]];
+    if (!own(o, key) || !Array.isArray(o[key])) o[key] = !own(o, key) || o[key] === undefined ? [] : [o[key]];
     o[key].push(v);
   }
-  for (const k of remove || []) { const [o, key] = walkTo(doc, k, false); if (o) { if (Array.isArray(o)) o.splice(Number(key), 1); else delete o[key]; } }
+  for (const k of remove || []) { const [o, key] = walkTo(doc, k, false); if (o && own(o, key)) { if (Array.isArray(o)) o.splice(Number(key), 1); else delete o[key]; } }
   return doc;
 }
 

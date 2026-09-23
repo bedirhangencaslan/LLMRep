@@ -49,7 +49,10 @@ export function screenJSON(v, depth = 0) {
   if (Array.isArray(v)) return v.map(x => screenJSON(x, depth + 1));
   if (v && typeof v === 'object') {
     const o = {};
-    for (const [k, x] of Object.entries(v)) o[String(k).slice(0, 100)] = screenJSON(x, depth + 1);
+    for (const [k, x] of Object.entries(v)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue; // no prototype games
+      o[String(k).slice(0, 100)] = screenJSON(x, depth + 1);
+    }
     return o;
   }
   return v;

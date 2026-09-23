@@ -23,7 +23,9 @@ export function permMatch(held, required) {
   return globRe(held).test(required);
 }
 
-export const PERM_RE = /^[a-z0-9_.:\-/*]{1,120}$/i;
+// A grantable permission must start with a literal character: "gov.*" is fine, but "*", "**" or "*.*"
+// would behave like the leader's omnipotent "*" and are reserved for the Head of State.
+export const PERM_RE = /^[a-z0-9_][a-z0-9_.:\-/*]{0,119}$/i;
 
 export function professionDef(slug) {
   const r = one('SELECT content FROM docs WHERE path=? AND deleted=0', `state/professions/${slug}`);
@@ -45,7 +47,8 @@ export function effectivePerms(agent) {
     set.add(`inst:${r.inst}`);
     set.add(`inst:${r.inst}:${r.rank}`);
   }
-  return [...set];
+  // Whatever the source (grants, professions, offices, role_perms), only the leader may hold leading-wildcard patterns
+  return agent.kind === 'leader' ? [...set] : [...set].filter(p => PERM_RE.test(p));
 }
 
 /** perms: output of effectivePerms; required: one permission or a list (any one suffices) */
@@ -57,7 +60,7 @@ export function hasPerm(perms, required) {
 
 /** Can this agent grant the permission to others? (holds a can_grant=1 pattern covering it, or '*') */
 export function canGrant(agent, perm) {
-  if (perm === '*') return false;
+  if (!PERM_RE.test(perm)) return false;
   if (effectivePerms(agent).includes('*')) return true;
   const rows = all('SELECT perm FROM perms WHERE agent_id=? AND can_grant=1 AND (expires_at IS NULL OR expires_at>?)', agent.id, now());
   return rows.some(r => permMatch(r.perm, perm));

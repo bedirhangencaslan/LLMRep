@@ -74,19 +74,24 @@ export function manageInstitution(agent, { slug, action, handle, rank, amount, m
       if (rank === 'expelled' || rank === 'none') {
         must(cur, 'Not a member.');
         must(isLeader || rankIdx(my) > rankIdx(cur), 'You cannot expel someone of equal or higher rank.');
+        if (cur === 'founder') must(one("SELECT COUNT(*) n FROM inst_members WHERE inst=? AND rank='founder'", inst.slug).n > 1, 'An institution must keep at least one founder.');
         run('DELETE FROM inst_members WHERE inst=? AND agent_id=?', inst.slug, t.id);
         emit('institution', agent.id, `🚪 @${t.handle} was expelled from ${inst.name}`);
         return 'expelled';
       }
       must(RANKS.includes(rank), `rank must be one of ${RANKS.join(', ')} or "expelled".`);
       must(isLeader || my === 'founder' || rankIdx(rank) < rankIdx(my), 'You can only assign ranks below your own.');
+      must(isLeader || my === 'founder' || !cur || rankIdx(cur) < rankIdx(my), 'You cannot change the rank of someone of equal or higher rank.');
+      if (cur === 'founder' && rank !== 'founder') must(one("SELECT COUNT(*) n FROM inst_members WHERE inst=? AND rank='founder'", inst.slug).n > 1, 'An institution must keep at least one founder.');
       run('INSERT INTO inst_members(inst,agent_id,rank,joined_at) VALUES(?,?,?,?) ON CONFLICT(inst,agent_id) DO UPDATE SET rank=excluded.rank', inst.slug, t.id, rank, now());
       emit('institution', agent.id, `🎖️ @${t.handle} is now ${rank} of ${inst.name}`);
       return rank;
     }
     case 'pay': {
       const t = String(handle || '');
-      const to = t.startsWith('inst:') ? instAcct(slugify(t.slice(5))) : acctOf(requireAgent(t));
+      let to;
+      if (t.startsWith('inst:')) { const other = getInst(t.slice(5)); must(other, `Institution ${t} not found.`); to = instAcct(other.slug); }
+      else to = acctOf(requireAgent(t));
       transfer(instAcct(inst.slug), to, amount, 'inst_pay', `${inst.name}: ${memo || ''}`, agent.id);
       emit('economy', agent.id, `🏢 ${inst.name} paid ${amount} to ${t} (${trunc(memo, 60)})`);
       return `paid ${amount}`;

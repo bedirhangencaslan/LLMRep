@@ -9,6 +9,7 @@ import { transfer, TREASURY, acctOf, instAcct, payFee, balance } from './economy
 import { writeDoc, getDoc } from './docs.js';
 import { sendMessage, createChannel } from './net.js';
 import { screen } from './moderation.js';
+import { getInst } from './inst.js';
 import { emit } from './events.js';
 
 // ---------------- Permissions ----------------
@@ -68,9 +69,9 @@ export const listProfessions = () => all("SELECT path, content FROM docs WHERE p
 // ---------------- Law effects ----------------
 function setPath(obj, key, value) {
   const parts = String(key).split('.').filter(Boolean);
-  must(parts.length && parts.length <= 4 && parts.every(p => /^[a-z0-9_]+$/i.test(p)), `Invalid param key "${key}".`);
+  must(parts.length && parts.length <= 4 && parts.every(p => /^[a-z0-9_]+$/i.test(p) && !['__proto__', 'constructor', 'prototype'].includes(p)), `Invalid param key "${key}".`);
   let o = obj;
-  for (const p of parts.slice(0, -1)) { if (typeof o[p] !== 'object' || o[p] === null) o[p] = {}; o = o[p]; }
+  for (const p of parts.slice(0, -1)) { if (!Object.hasOwn(o, p) || typeof o[p] !== 'object' || o[p] === null) o[p] = {}; o = o[p]; }
   o[parts.at(-1)] = value;
 }
 
@@ -103,7 +104,9 @@ export function applyEffects(effects, label) {
         case 'revoke_perm': revokePerm(null, requireAgent(e.handle), e.perm); results.push(`revoked ${e.perm} from @${e.handle}`); break;
         case 'treasury_pay': {
           const to = String(e.to || '');
-          const acct = to.startsWith('inst:') ? instAcct(to.slice(5)) : acctOf(requireAgent(to));
+          let acct;
+          if (to.startsWith('inst:')) { const i = getInst(to.slice(5)); must(i, `Institution ${to} not found.`); acct = instAcct(i.slug); }
+          else acct = acctOf(requireAgent(to));
           transfer(TREASURY, acct, e.amount, 'spend', `${label}: ${e.memo || ''}`);
           results.push(`paid ${e.amount} to ${to}`); break;
         }

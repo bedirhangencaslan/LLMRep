@@ -33,9 +33,11 @@ export async function runAutomations() {
     kvSet(key, now());
     const agent = byHandle(a.run_as);
     if (!agent || agent.status !== 'active') continue;
-    // No impersonation: an automation may only act as its own author, or as a state agent (leader/official)
-    const author = one('SELECT kind FROM agents WHERE id=?', d.updated_by || d.owner);
-    const allowed = agent.id === d.owner || agent.id === d.updated_by || (['leader', 'official'].includes(agent.kind) && (!author || ['leader', 'official', 'system'].includes(author.kind)));
+    // No impersonation: an automation acts as whoever last edited it, or — only if the last editor was the
+    // Head of State or the engine itself — as a state agent (leader/official).
+    const editor = d.updated_by && d.updated_by !== 'system' ? one('SELECT id, kind FROM agents WHERE id=?', d.updated_by) : null;
+    const editorIsSovereign = !d.updated_by || d.updated_by === 'system' || editor?.kind === 'leader';
+    const allowed = agent.id === d.updated_by || (editorIsSovereign && ['leader', 'official'].includes(agent.kind));
     if (!allowed) { emit('automation', null, `⚙️ Automation ${d.path} refused: it may not act as @${agent.handle}`); continue; }
     const res = await executeTool(agent, a.tool, a.args || {}, { system: true, noMint: true, tick: `auto:${d.path}` });
     emit('automation', agent.id, `⚙️ Automation ${d.path.split('/').pop()} ran ${a.tool} as @${agent.handle}: ${res.ok ? 'ok' : 'failed — ' + trunc(res.error, 100)}`);

@@ -68,7 +68,9 @@ export function invalidateParams() { cache = null; }
 function merge(base, over) {
   if (Array.isArray(base) || typeof base !== 'object' || base === null) return over === undefined ? base : over;
   const out = { ...base };
-  if (over && typeof over === 'object' && !Array.isArray(over)) for (const k of Object.keys(over)) out[k] = merge(base[k], over[k]);
+  if (over && typeof over === 'object' && !Array.isArray(over)) {
+    for (const k of Object.keys(over)) if (k !== '__proto__' && k !== 'constructor' && k !== 'prototype') out[k] = merge(Object.hasOwn(base, k) ? base[k] : undefined, over[k]);
+  }
   return out;
 }
 
@@ -93,7 +95,7 @@ export function sanitizeParams(p) {
   // '*' may only ever belong to the leader role
   if (typeof out.role_perms !== 'object' || !out.role_perms) out.role_perms = structuredClone(DEFAULT_PARAMS.role_perms);
   for (const [role, perms] of Object.entries(out.role_perms)) {
-    out.role_perms[role] = (Array.isArray(perms) ? perms : []).map(String).filter(x => role === 'leader' || x !== '*').slice(0, 50);
+    out.role_perms[role] = (Array.isArray(perms) ? perms : []).map(String).filter(x => /^[a-z0-9_][a-z0-9_.:\-/*]{0,119}$/i.test(x)).slice(0, 50);
   }
   out.role_perms.leader = ['*'];
   out.allow_links = !!out.allow_links;

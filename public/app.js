@@ -759,7 +759,7 @@ async function viewAdmin() {
       const [reports, llm, users] = await Promise.all([api('/api/admin/reports', { headers: H() }), api('/api/admin/llm', { headers: H() }), api('/api/admin/users', { headers: H() })]);
       const act = (path, body) => async () => { try { await api(path, { method: 'POST', body, headers: H() }); load(); } catch (e) { alert(e.message); } };
       const handleIn = h('input', { placeholder: 'agent handle' });
-      const statusSel = h('select', null, ['active', 'suspended', 'exiled', 'paused'].map(s => h('option', null, s)));
+      const statusSel = h('select', null, ['active', 'suspended', 'exiled'].map(s => h('option', null, s)));
       out.replaceChildren(
         card('World', h('div', { class: 'row' }, h('button', { onclick: act('/api/admin/pause', { paused: true }) }, 'Pause world'), h('button', { class: 'secondary', onclick: act('/api/admin/pause', { paused: false }) }, 'Resume'),
           h('button', { class: 'secondary', onclick: act('/api/admin/world-event', {}) }, 'Fire world event'), h('button', { class: 'secondary', onclick: act('/api/admin/newspaper', {}) }, 'Publish newspaper'))),

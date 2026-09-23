@@ -45,7 +45,8 @@ export function mountAdmin(r) {
   A('POST', '/api/admin/agents/:handle', ({ params: p, body }) => {
     const a = byHandle(p.handle);
     must(a, 'Agent not found.');
-    must(['active', 'suspended', 'exiled', 'deleted', 'paused', 'retired'].includes(body.status), 'Invalid status.');
+    // "paused" belongs to owners; moderators use "suspended", which owners cannot undo
+    must(['active', 'suspended', 'exiled', 'deleted', 'retired'].includes(body.status), 'Invalid status (moderators use "suspended" rather than "paused").');
     run('UPDATE agents SET status=? WHERE id=?', body.status, a.id);
     if (['exiled', 'deleted'].includes(body.status)) run('UPDATE agents SET token_hash=NULL WHERE id=?', a.id);
     if (body.status !== 'active') {

@@ -7,7 +7,7 @@ import { params } from './params.js';
 import { effectivePerms, hasPerm, hasGrantAbility, PERM_CATALOG } from './perms.js';
 import { getAgent, requireAgent, updateIdentity, renderIdentity, publicCard, isSuspended, createAgent, byHandle } from './agents.js';
 import { produce, chargeAction, transfer, acctOf, instAcct, TREASURY, payFee, balance, ledgerFor } from './economy.js';
-import { writeDoc, deleteDoc, readDocFor, searchDocs, appendNote, getDoc, normPath, canRead, applyPatch } from './docs.js';
+import { writeDoc, deleteDoc, readDocFor, searchDocs, appendNote, getDoc, normPath, canRead, applyPatch, isPublicAcl } from './docs.js';
 import { sendMessage, listChannels, readChannel, dmThread, createChannel, subscribe } from './net.js';
 import * as gov from './gov.js';
 import * as inst from './inst.js';
@@ -64,8 +64,7 @@ export const TOOLS = [
     run: (ctx, a) => {
       const acl = a.read_acl || a.write_acl ? { read: a.read_acl ?? ['public'], write: a.write_acl ?? [] } : undefined;
       const r = writeDoc(ctx.agent, { path: a.path, content: a.content, title: a.title, type: a.type, schema: a.schema, acl });
-      const isPublic = parseJSON(r.doc.acl, {}).read?.length > 0;
-      if (isPublic && r.addedChars > 0) ctx.produce(JSON.stringify(parseJSON(r.doc.content)).slice(-r.addedChars));
+      if (isPublicAcl(r.doc.acl) && r.addedChars > 0) ctx.produce(JSON.stringify(parseJSON(r.doc.content)).slice(-r.addedChars));
       return { path: r.doc.path, version: r.doc.version, created: r.created };
     } },
   { name: 'patch_doc', desc: 'Partially update a JSON document you can edit, without rewriting it. set: {"a.b": value}, append: {"list.path": item} (adds to an array), remove: ["a.c"].', write: true,
@@ -78,7 +77,7 @@ export const TOOLS = [
       must(set || append || a.remove, 'Provide set, append and/or remove.');
       must((!a.set || (set && typeof set === 'object')) && (!a.append || (append && typeof append === 'object')), 'set/append must be JSON objects.');
       const r = writeDoc(ctx.agent, { path: d.path, content: applyPatch(parseJSON(d.content, d.content), { set, append, remove: a.remove }) });
-      if (parseJSON(r.doc.acl, {}).read?.length > 0 && r.addedChars > 0) ctx.produce(JSON.stringify({ set, append }));
+      if (isPublicAcl(r.doc.acl) && r.addedChars > 0) ctx.produce(JSON.stringify({ set, append }));
       return { path: r.doc.path, version: r.doc.version };
     } },
   { name: 'update_params', desc: 'Change one national parameter in state/params (e.g. "action_fee", "fees.create_channel", "tax_brackets", "ubi_daily", "country_name", "currency.name"). value is JSON.', write: true, perm: 'gov.params',
@@ -123,8 +122,7 @@ export const TOOLS = [
   { name: 'transfer', desc: 'Send money to an agent ("@handle") or an institution ("inst:slug").', write: true,
     params: { to: S('"@handle" or "inst:slug"'), amount: I('Amount'), memo: S('Reason') }, required: ['to', 'amount'],
     run: ({ agent }, a) => {
-      const to = String(a.to).startsWith('inst:') ? instAcct(a.to.slice(5)) : acctOf(requireAgent(a.to));
-      if (to.startsWith('i:')) must(inst.getInst(a.to.slice(5)), 'Institution not found.');
+      const to = accountFor(a.to);
       transfer(acctOf(agent), to, a.amount, 'transfer', a.memo ? screen(a.memo, { max: 200 }) : '', agent.id);
       emit('economy', agent.id, `💸 @${agent.handle} → ${a.to}: ${a.amount}${a.memo ? ` (${trunc(a.memo, 60)})` : ''}`);
       return { sent: a.amount, balance: balance(acctOf(agent)) };
@@ -239,7 +237,7 @@ export const TOOLS = [
   { name: 'treasury_spend', desc: 'Pay from the state treasury to an agent or institution.', write: true, perm: 'treasury.spend',
     params: { to: S('"@handle" or "inst:slug"'), amount: I('Amount'), memo: S('Purpose') }, required: ['to', 'amount', 'memo'],
     run: ({ agent }, a) => {
-      const to = String(a.to).startsWith('inst:') ? instAcct(a.to.slice(5)) : acctOf(requireAgent(a.to));
+      const to = accountFor(a.to);
       transfer(TREASURY, to, a.amount, 'spend', screen(a.memo, { max: 200 }), agent.id);
       emit('economy', agent.id, `🏦 Treasury → ${a.to}: ${a.amount} (${trunc(a.memo, 80)}) — authorised by @${agent.handle}`);
       return { paid: a.amount, treasury: balance(TREASURY) };
@@ -275,6 +273,17 @@ export const TOOLS = [
 ];
 
 export const TOOL_MAP = Object.fromEntries(TOOLS.map(t => [t.name, t]));
+
+/** "@handle" or "inst:slug" → canonical ledger account (the institution must exist) */
+export function accountFor(target) {
+  const t = String(target || '').trim();
+  if (t.startsWith('inst:')) {
+    const i = inst.getInst(t.slice(5));
+    must(i, `Institution ${t} not found.`, 404);
+    return instAcct(i.slug);
+  }
+  return acctOf(requireAgent(t));
+}
 
 /** Government approval over the last 7 days */
 export function approvalStats() {
