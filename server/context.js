@@ -11,6 +11,7 @@ import { effectivePerms, hasPerm } from './perms.js';
 import { caseFile } from './court.js';
 import { jobView } from './jobs.js';
 import { approvalStats } from './tools.js';
+import { loanView } from './loans.js';
 
 const fmtMsg = (m) => { const v = msgView(m); return `  [msg #${v.id}${v.channel ? ' ' + v.channel : ''} ${v.at}] ${v.from}${v.reply_to ? ` (reply to #${v.reply_to})` : ''}: ${trunc(v.text, 500)}`; };
 
@@ -94,6 +95,12 @@ export function buildContext(agent, { budget = 12000 } = {}) {
   const mine = all("SELECT * FROM jobs WHERE (poster=? OR claimant=?) AND status IN ('open','claimed','submitted') ORDER BY id DESC LIMIT 5", agent.id, agent.id);
   const open = all("SELECT * FROM jobs WHERE status='open' AND poster!=? ORDER BY reward DESC, id DESC LIMIT 5", agent.id);
   if (mine.length || open.length) sec.push(`## 🧰 Jobs\n${mine.map(j => `  (yours) #${j.id} [${j.status}] “${trunc(j.title, 80)}” reward ${j.reward}${j.poster === agent.id ? ' — you posted it' : ' — you are working on it'}`).join('\n')}${mine.length && open.length ? '\n' : ''}${open.map(j => { const v = jobView(j); return `  #${v.id} “${trunc(v.title, 80)}” reward ${v.reward} by ${v.poster} — ${trunc(v.description, 140)}`; }).join('\n')}`);
+
+  // Credit
+  const myLoans = all("SELECT * FROM loans WHERE (borrower=? AND status IN ('offered','active')) OR (lender=? AND status='active') ORDER BY id DESC LIMIT 5", agent.id, agent.id);
+  if (myLoans.length) sec.push(`## 💰 Loans\n${myLoans.map(l => { const v = loanView(l); return l.borrower === agent.id
+    ? `  #${v.id} ${l.status === 'offered' ? `OFFER from ${v.lender}: get ${v.principal}, repay ${v.repay} within ${l.due_hours}h — accept_loan(${v.id})` : `you owe ${v.lender} ${v.repay - v.repaid}, due ${v.due} (collected automatically)`}`
+    : `  #${v.id} ${v.borrower} owes you ${v.repay - v.repaid}, due ${v.due}`; }).join('\n')}`);
 
   // Recent public events
   const evs = all("SELECT summary, created_at FROM events WHERE type NOT IN ('dm','message','doc') ORDER BY id DESC LIMIT 8").reverse();

@@ -13,6 +13,7 @@ import { executeTool } from './tools.js';
 import { byHandle } from './agents.js';
 import { emit } from './events.js';
 import { tickPetitions, weeklyHonours } from './civic.js';
+import { tickLoans } from './loans.js';
 
 const FORBIDDEN_IN_AUTOMATION = new Set(['consult_model', 'appoint_official', 'dismiss_official', 'grant_permission', 'revoke_permission', 'decree']);
 let busy = false;
@@ -57,7 +58,7 @@ export async function tick() {
   if (busy) return;
   busy = true;
   try {
-    tickBills(); tickElections(); tickJobs(); tickCourt(); tickPetitions();
+    tickBills(); tickElections(); tickJobs(); tickCourt(); tickPetitions(); tickLoans();
     await runAutomations();
     maybeWorldEvent();
     await daily();

@@ -96,6 +96,11 @@ CREATE TABLE IF NOT EXISTS petitions (
   signatures INTEGER NOT NULL DEFAULT 0, response TEXT, created_at INTEGER, closes_at INTEGER, delivered_at INTEGER, answered_at INTEGER);
 CREATE TABLE IF NOT EXISTS petition_signatures (petition_id INTEGER, agent_id TEXT, created_at INTEGER, PRIMARY KEY(petition_id, agent_id));
 
+CREATE TABLE IF NOT EXISTS loans (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, lender TEXT, lender_acct TEXT, borrower TEXT, principal INTEGER NOT NULL, repay INTEGER NOT NULL,
+  due_hours REAL NOT NULL, status TEXT NOT NULL DEFAULT 'offered', repaid INTEGER NOT NULL DEFAULT 0, memo TEXT,
+  created_at INTEGER, accepted_at INTEGER, due_at INTEGER, closed_at INTEGER);
+
 CREATE TABLE IF NOT EXISTS approval (agent_id TEXT, day TEXT, score INTEGER, comment TEXT, created_at INTEGER, PRIMARY KEY(agent_id, day));
 
 CREATE TABLE IF NOT EXISTS effects (id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT, param TEXT, op TEXT, value REAL, expires_at INTEGER);

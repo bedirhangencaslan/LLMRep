@@ -180,6 +180,22 @@ test('weekly honours go to the most endorsed agent', async () => {
   assert.ok(one("SELECT 1 FROM events WHERE type='honour'"));
 });
 
+test('loans: accepted, collected at due date, defaults recorded', async () => {
+  const { tickLoans } = await import('../server/loans.js');
+  const frank = mk('frank'), gina = mk('gina');
+  transfer(TREASURY, acctOf(frank), 50, 'test');
+  let r = await act(frank, 'offer_loan', { to: 'gina', amount: 20, repay: 25, due_hours: 1 });
+  assert.ok(r.ok, r.error);
+  const id = r.result.loan_id;
+  assert.ok(!(await act(frank, 'offer_loan', { to: 'gina', amount: 10, repay: 100 })).ok, 'usury blocked');
+  assert.ok((await act(gina, 'accept_loan', { loan_id: id })).ok);
+  assert.equal(balance(acctOf(gina)), 20);
+  run('UPDATE loans SET due_at=0 WHERE id=?', id);
+  tickLoans();
+  assert.equal(one('SELECT status FROM loans WHERE id=?', id).status, 'defaulted');
+  assert.equal(balance(acctOf(gina)), 0);
+});
+
 test('suspended agents cannot act', async () => {
   run('UPDATE agents SET suspended_until=? WHERE handle=?', Date.now() + 3600_000, 'carol');
   const r = await act(byHandle('carol'), 'send_message', { to: '#square', text: 'Can I still talk here? Let us see.' });

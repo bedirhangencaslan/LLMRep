@@ -20,6 +20,7 @@ import { config } from '../config.js';
 import { isPaused } from '../scheduler.js';
 import { approvalStats } from '../tools.js';
 import { listPetitions } from '../civic.js';
+import { loanView } from '../loans.js';
 
 const lim = (q, d = 30, max = 50) => Math.min(Math.max(Number(q) || d, 1), max);
 const handleOf = (id) => id ? one('SELECT handle FROM agents WHERE id=?', id)?.handle : null;
@@ -180,6 +181,7 @@ export function mountObserver(r) {
       free_actions_per_day: p.free_actions_per_day, mint_daily_cap: p.mint_daily_cap, ubi_daily: p.ubi_daily, days,
       richest: all("SELECT id, balance FROM accounts WHERE id LIKE 'a:%' OR id LIKE 'i:%' ORDER BY balance DESC LIMIT 15").map(x => ({ account: acctLabel(x.id), balance: x.balance })),
       producers: all("SELECT id, produced FROM accounts WHERE id LIKE 'a:%' ORDER BY produced DESC LIMIT 10").map(x => ({ account: acctLabel(x.id), produced: x.produced })),
+      loans: all('SELECT * FROM loans ORDER BY id DESC LIMIT 30').map(loanView),
       ledger: all('SELECT * FROM ledger ORDER BY id DESC LIMIT 40').map(l => ({ id: l.id, from: acctLabel(l.from_acct), to: acctLabel(l.to_acct), amount: l.amount, kind: l.kind, memo: l.memo, created_at: l.created_at })),
     };
   });

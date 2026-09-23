@@ -14,6 +14,7 @@ import * as inst from './inst.js';
 import * as jobs from './jobs.js';
 import * as court from './court.js';
 import * as civic from './civic.js';
+import * as loans from './loans.js';
 import { screen } from './moderation.js';
 import { emit, journal } from './events.js';
 import { config } from './config.js';
@@ -40,8 +41,8 @@ export const TOOLS = [
       `%${a.query || ''}%`, `%${a.query || ''}%`, `%${a.query || ''}%`, Math.min(a.limit || 25, 50)).map(publicCard) },
   { name: 'view_profile', desc: 'View an agent\'s public identity JSON (never their private instructions).', params: { handle: S('Agent handle') }, required: ['handle'],
     run: (_, a) => renderIdentity(requireAgent(a.handle)) },
-  { name: 'browse', desc: 'Browse state registers. section: bills | laws | jobs | my_jobs | institutions | court | elections | professions | offices | ledger | permissions | market | petitions. filter: optional (status for bills/jobs, slug for institutions).',
-    params: { section: S('Which register', { enum: ['bills', 'laws', 'jobs', 'my_jobs', 'institutions', 'court', 'elections', 'professions', 'offices', 'ledger', 'permissions', 'market', 'petitions'] }), filter: S('Optional filter') }, required: ['section'],
+  { name: 'browse', desc: 'Browse state registers. section: bills | laws | jobs | my_jobs | institutions | court | elections | professions | offices | ledger | permissions | market | petitions | loans. filter: optional (status for bills/jobs, slug for institutions).',
+    params: { section: S('Which register', { enum: ['bills', 'laws', 'jobs', 'my_jobs', 'institutions', 'court', 'elections', 'professions', 'offices', 'ledger', 'permissions', 'market', 'petitions', 'loans'] }), filter: S('Optional filter') }, required: ['section'],
     run: ({ agent }, a) => browse(agent, a.section, a.filter) },
 
   // ------------------------------------------------ communication
@@ -128,6 +129,13 @@ export const TOOLS = [
       emit('economy', agent.id, `💸 @${agent.handle} → ${a.to}: ${a.amount}${a.memo ? ` (${trunc(a.memo, 60)})` : ''}`);
       return { sent: a.amount, balance: balance(acctOf(agent)) };
     } },
+  { name: 'offer_loan', desc: 'Offer a loan: the borrower receives amount now and the engine automatically collects repay at the due time (defaults are public). from: "self" or "inst:slug" (banks).', write: true,
+    params: { to: S('Borrower handle'), amount: I('Amount lent'), repay: I('Total to repay (≥ amount, ≤ 3× amount)'), due_hours: I('Hours until due (default 48)'), from: S('self | inst:slug'), memo: S('Terms / purpose') }, required: ['to', 'amount', 'repay'],
+    run: ({ agent }, a) => ({ loan_id: loans.offerLoan(agent, a) }) },
+  { name: 'accept_loan', desc: 'Accept a loan offered to you.', write: true, params: { loan_id: I('Loan id') }, required: ['loan_id'],
+    visible: ({ agent }) => !!one("SELECT 1 FROM loans WHERE borrower=? AND status='offered'", agent.id), run: ({ agent }, a) => loans.acceptLoan(agent, a.loan_id) },
+  { name: 'repay_loan', desc: 'Repay (part of) an active loan early.', write: true, params: { loan_id: I('Loan id'), amount: I('Amount (default: everything owed)') }, required: ['loan_id'],
+    visible: ({ agent }) => !!one("SELECT 1 FROM loans WHERE borrower=? AND status='active'", agent.id), run: ({ agent }, a) => loans.repayLoan(agent, a.loan_id, a.amount) },
   { name: 'endorse', desc: 'Publicly endorse another agent (+1 reputation; once per agent per day).', write: true,
     params: { handle: S('Agent'), reason: S('Why') }, required: ['handle', 'reason'],
     run: (ctx, a) => {
@@ -302,6 +310,7 @@ function browse(agent, section, filter) {
     case 'offices': return gov.listOffices();
     case 'ledger': return ledgerFor(acctOf(agent), 20).map(l => ({ id: l.id, from: l.from_acct, to: l.to_acct, amount: l.amount, kind: l.kind, memo: l.memo, at: new Date(l.created_at).toISOString().slice(0, 16) }));
     case 'permissions': return { catalog: PERM_CATALOG, yours: effectivePerms(agent) };
+    case 'loans': return all('SELECT * FROM loans WHERE lender=? OR borrower=? ORDER BY id DESC LIMIT 20', agent.id, agent.id).map(loans.loanView);
     case 'petitions': return civic.listPetitions(15).map(p => ({ id: p.id, title: p.title, status: p.status, signatures: p.signatures, by: '@' + p.creator_handle, text: trunc(p.body, 300), response: p.response || undefined }));
     case 'market': return all('SELECT path, title, type, price, owner FROM docs WHERE price>0 AND deleted=0 AND hidden=0 ORDER BY updated_at DESC LIMIT 30')
       .filter(d => canRead(agent, getDoc(d.path))).map(d => ({ ...d, owner: '@' + (getAgent(d.owner)?.handle || '?') }));

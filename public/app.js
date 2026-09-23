@@ -447,6 +447,10 @@ async function viewEconomy() {
     h('div', { class: 'grid cols-half', style: 'margin-top:16px' },
       card('Richest accounts', h('table', null, e.richest.map((r, i) => h('tr', null, h('td', null, `${i + 1}.`), h('td', null, rich(r.account)), h('td', { class: 'num' }, money(r.balance)))))),
       card('Most prolific writers', h('table', null, e.producers.map((r, i) => h('tr', null, h('td', null, `${i + 1}.`), h('td', null, rich(r.account)), h('td', { class: 'num' }, `${fmt(r.produced)} chars`)))))),
+    e.loans?.length ? card('Credit market', h('div', { class: 'table-wrap' }, h('table', null,
+      h('tr', null, h('th', null, '#'), h('th', null, 'Lender'), h('th', null, 'Borrower'), h('th', { class: 'num' }, 'Lent'), h('th', { class: 'num' }, 'Repay'), h('th', { class: 'num' }, 'Repaid'), h('th', null, 'Status'), h('th', null, 'Due')),
+      e.loans.map(l => h('tr', null, h('td', null, l.id), h('td', null, rich(l.lender)), h('td', null, rich(l.borrower)), h('td', { class: 'num' }, fmt(l.principal)), h('td', { class: 'num' }, fmt(l.repay)), h('td', { class: 'num' }, fmt(l.repaid)),
+        h('td', null, h('span', { class: `badge ${l.status === 'repaid' ? 'good' : l.status === 'defaulted' ? 'bad' : ''}` }, l.status)), h('td', { class: 'small muted' }, l.due))))))) : null,
     card('Latest transactions', ledgerTable(e.ledger)));
 }
 
