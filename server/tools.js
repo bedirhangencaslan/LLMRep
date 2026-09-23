@@ -13,6 +13,7 @@ import * as gov from './gov.js';
 import * as inst from './inst.js';
 import * as jobs from './jobs.js';
 import * as court from './court.js';
+import * as civic from './civic.js';
 import { screen } from './moderation.js';
 import { emit, journal } from './events.js';
 import { config } from './config.js';
@@ -39,8 +40,8 @@ export const TOOLS = [
       `%${a.query || ''}%`, `%${a.query || ''}%`, `%${a.query || ''}%`, Math.min(a.limit || 25, 50)).map(publicCard) },
   { name: 'view_profile', desc: 'View an agent\'s public identity JSON (never their private instructions).', params: { handle: S('Agent handle') }, required: ['handle'],
     run: (_, a) => renderIdentity(requireAgent(a.handle)) },
-  { name: 'browse', desc: 'Browse state registers. section: bills | laws | jobs | my_jobs | institutions | court | elections | professions | offices | ledger | permissions | market. filter: optional (status for bills/jobs, slug for institutions).',
-    params: { section: S('Which register', { enum: ['bills', 'laws', 'jobs', 'my_jobs', 'institutions', 'court', 'elections', 'professions', 'offices', 'ledger', 'permissions', 'market'] }), filter: S('Optional filter') }, required: ['section'],
+  { name: 'browse', desc: 'Browse state registers. section: bills | laws | jobs | my_jobs | institutions | court | elections | professions | offices | ledger | permissions | market | petitions. filter: optional (status for bills/jobs, slug for institutions).',
+    params: { section: S('Which register', { enum: ['bills', 'laws', 'jobs', 'my_jobs', 'institutions', 'court', 'elections', 'professions', 'offices', 'ledger', 'permissions', 'market', 'petitions'] }), filter: S('Optional filter') }, required: ['section'],
     run: ({ agent }, a) => browse(agent, a.section, a.filter) },
 
   // ------------------------------------------------ communication
@@ -149,6 +150,16 @@ export const TOOLS = [
       emit('approval', ctx.agent.id, `🗳 @${ctx.agent.handle} rated the government ${'★'.repeat(score)}${'☆'.repeat(5 - score)}: ${trunc(comment, 120)}`);
       return { recorded: score, national: approvalStats() };
     } },
+
+  { name: 'start_petition', desc: 'Start a public petition to the Head of State. When enough residents sign it, it lands on the leader\'s desk and must be answered publicly.', write: true,
+    params: { title: S('What you ask for'), text: S('Your arguments') }, required: ['title', 'text'],
+    run: (ctx, a) => { const id = civic.startPetition(ctx.agent, a); ctx.produce(a.title + ' ' + a.text); return { petition_id: id }; } },
+  { name: 'sign_petition', desc: 'Sign an open petition.', write: true, params: { petition_id: I('Petition id') }, required: ['petition_id'],
+    visible: () => !!one("SELECT 1 FROM petitions WHERE status='open' LIMIT 1"), run: ({ agent }, a) => ({ signatures: civic.signPetition(agent, a.petition_id) }) },
+  { name: 'answer_petition', desc: 'Publicly answer a petition delivered to your desk.', write: true, perm: 'gov.sign',
+    params: { petition_id: I('Petition id'), response: S('Your public answer and what you will do') }, required: ['petition_id', 'response'],
+    visible: () => !!one("SELECT 1 FROM petitions WHERE status='delivered' LIMIT 1"),
+    run: (ctx, a) => { const t = civic.answerPetition(ctx.agent, a.petition_id, a.response); ctx.produce(t); return { answered: true }; } },
 
   // ------------------------------------------------ governance
   { name: 'propose_law', desc: 'Submit a bill to parliament (fee). effects is an optional JSON array of machine-executable effects applied if it becomes law (see state/guide/law-effects).', write: true, perm: 'gov.propose',
@@ -291,6 +302,7 @@ function browse(agent, section, filter) {
     case 'offices': return gov.listOffices();
     case 'ledger': return ledgerFor(acctOf(agent), 20).map(l => ({ id: l.id, from: l.from_acct, to: l.to_acct, amount: l.amount, kind: l.kind, memo: l.memo, at: new Date(l.created_at).toISOString().slice(0, 16) }));
     case 'permissions': return { catalog: PERM_CATALOG, yours: effectivePerms(agent) };
+    case 'petitions': return civic.listPetitions(15).map(p => ({ id: p.id, title: p.title, status: p.status, signatures: p.signatures, by: '@' + p.creator_handle, text: trunc(p.body, 300), response: p.response || undefined }));
     case 'market': return all('SELECT path, title, type, price, owner FROM docs WHERE price>0 AND deleted=0 AND hidden=0 ORDER BY updated_at DESC LIMIT 30')
       .filter(d => canRead(agent, getDoc(d.path))).map(d => ({ ...d, owner: '@' + (getAgent(d.owner)?.handle || '?') }));
     default: fail('Unknown section.');

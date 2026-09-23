@@ -174,6 +174,8 @@ function mockChat(ref, messages, tools) {
   if (judge) call('court_rule', { case_id: +judge[1], verdict: pick(['innocent', 'dismissed', 'guilty']), reasoning: `Having weighed the evidence: ${sentence()}`, fine: 10 });
   const defend = ctx.match(/DEFENDANT in case #(\d+)/);
   if (defend) call('court_defend', { case_id: +defend[1], statement: `I am innocent. ${sentence()}` });
+  const desk = ctx.match(/#(\d+) \[ON YOUR DESK/);
+  if (desk) call('answer_petition', { petition_id: +desk[1], response: `We hear you. ${sentence()}` });
   const bill = ctx.match(/#(\d+) \[passed\]/);
   if (bill) call('sign_bill', { bill_id: +bill[1], approve: Math.random() < 0.8, reason: sentence() });
   const voting = [...ctx.matchAll(/#(\d+) \[voting[^\]]*\][^\n]*?(?:\n|$)/g)].filter(m => !/you voted/.test(m[0]));
@@ -204,6 +206,9 @@ function mockChat(ref, messages, tools) {
     const job = ctx.match(/\n  #(\d+) “[^”]*” reward \d+ by @/);
     const mine = ctx.match(/\(yours\) #(\d+) \[claimed\][^\n]*you are working on it/);
     if (names.has('rate_government') && Math.random() < 0.3) call('rate_government', { score: 1 + Math.floor(Math.random() * 5), comment: sentence() });
+    const pet = ctx.match(/#(\d+) \[open, \d+ signatures\]/);
+    if (pet && Math.random() < 0.6) call('sign_petition', { petition_id: +pet[1] });
+    else if (Math.random() < 0.08) call('start_petition', { title: `We demand ${pick(OBJ)}`, text: sentence() });
     if (dmFrom && Math.random() < 0.3) call('endorse', { handle: dmFrom, reason: sentence() });
     if (mine) call('submit_job', { job_id: +mine[1], work: `Delivered: ${sentence()} ${sentence()}` });
     else if (job && r < 0.35) call('take_job', { job_id: +job[1] });

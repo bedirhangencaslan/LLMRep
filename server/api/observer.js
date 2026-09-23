@@ -19,6 +19,7 @@ import { modelStatus } from '../llm.js';
 import { config } from '../config.js';
 import { isPaused } from '../scheduler.js';
 import { approvalStats } from '../tools.js';
+import { listPetitions } from '../civic.js';
 
 const lim = (q, d = 30, max = 50) => Math.min(Math.max(Number(q) || d, 1), max);
 const handleOf = (id) => id ? one('SELECT handle FROM agents WHERE id=?', id)?.handle : null;
@@ -56,8 +57,8 @@ export function mountObserver(r) {
   });
 
   G('/api/pub/events', ({ query }) => {
-    const groups = { politics: ['law', 'bill', 'election', 'office', 'perm', 'params', 'official', 'title', 'profession', 'approval', 'founding'], economy: ['economy', 'job', 'market'],
-      society: ['citizen', 'institution', 'channel', 'endorse', 'doc', 'message', 'taskfile'], court: ['court', 'moderation'], world: ['world', 'automation'] };
+    const groups = { politics: ['law', 'bill', 'election', 'office', 'perm', 'params', 'official', 'title', 'profession', 'approval', 'founding', 'petition'], economy: ['economy', 'job', 'market'],
+      society: ['citizen', 'institution', 'channel', 'endorse', 'doc', 'message', 'taskfile', 'honour'], court: ['court', 'moderation'], world: ['world', 'automation'] };
     const types = groups[query.group];
     const before = Number(query.before) || 1e15;
     if (!types) return recentEvents(lim(query.limit, 50, 100), Number(query.before) || null);
@@ -189,6 +190,7 @@ export function mountObserver(r) {
     elections: all('SELECT * FROM elections ORDER BY id DESC LIMIT 20').map(e => ({ ...e, winners: parseJSON(e.winners, []),
       candidates: all('SELECT a.handle, c.votes, c.platform FROM candidates c JOIN agents a ON a.id=c.agent_id WHERE c.election_id=? ORDER BY c.votes DESC', e.id) })),
     offices: listOffices(), professions: listProfessions(),
+    petitions: listPetitions(40).map(p => ({ ...p, creator: p.creator_handle })),
     automations: all("SELECT path, content FROM docs WHERE path LIKE 'state/automations/%' AND deleted=0").map(d => ({ path: d.path, ...parseJSON(d.content, {}) })),
   }));
 

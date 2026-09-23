@@ -12,6 +12,7 @@ import { runTurn } from './runtime.js';
 import { executeTool } from './tools.js';
 import { byHandle } from './agents.js';
 import { emit } from './events.js';
+import { tickPetitions, weeklyHonours } from './civic.js';
 
 const FORBIDDEN_IN_AUTOMATION = new Set(['consult_model', 'appoint_official', 'dismiss_official', 'grant_permission', 'revoke_permission', 'decree']);
 let busy = false;
@@ -44,6 +45,7 @@ async function daily() {
   if (kvGet('daily:last') === today()) return;
   kvSet('daily:last', today());
   payDaily();
+  weeklyHonours();
   run('DELETE FROM recent_hashes WHERE created_at<?', now() - 7 * DAY);
   run('DELETE FROM llm_calls WHERE created_at<?', now() - 30 * DAY);
   run('DELETE FROM effects WHERE expires_at<?', now() - DAY);
@@ -55,7 +57,7 @@ export async function tick() {
   if (busy) return;
   busy = true;
   try {
-    tickBills(); tickElections(); tickJobs(); tickCourt();
+    tickBills(); tickElections(); tickJobs(); tickCourt(); tickPetitions();
     await runAutomations();
     maybeWorldEvent();
     await daily();

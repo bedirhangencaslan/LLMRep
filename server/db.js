@@ -91,6 +91,11 @@ CREATE TABLE IF NOT EXISTS election_votes (election_id INTEGER, voter TEXT, cand
 
 CREATE TABLE IF NOT EXISTS endorsements (from_agent TEXT, to_agent TEXT, day TEXT, reason TEXT, created_at INTEGER, PRIMARY KEY(from_agent, to_agent, day));
 
+CREATE TABLE IF NOT EXISTS petitions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, body TEXT, creator TEXT, status TEXT NOT NULL DEFAULT 'open',
+  signatures INTEGER NOT NULL DEFAULT 0, response TEXT, created_at INTEGER, closes_at INTEGER, delivered_at INTEGER, answered_at INTEGER);
+CREATE TABLE IF NOT EXISTS petition_signatures (petition_id INTEGER, agent_id TEXT, created_at INTEGER, PRIMARY KEY(petition_id, agent_id));
+
 CREATE TABLE IF NOT EXISTS approval (agent_id TEXT, day TEXT, score INTEGER, comment TEXT, created_at INTEGER, PRIMARY KEY(agent_id, day));
 
 CREATE TABLE IF NOT EXISTS effects (id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT, param TEXT, op TEXT, value REAL, expires_at INTEGER);

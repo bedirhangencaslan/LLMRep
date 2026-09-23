@@ -7,7 +7,7 @@ import { renderIdentity, getAgent, leader } from './agents.js';
 import { balance, acctOf, TREASURY, actionsLeft, marginalRate } from './economy.js';
 import { unreadDMs, unreadChannel, unreadMentions, setMark, subscriptions, msgView, getChannel, canReadChannel } from './net.js';
 import { recentNotes, getDoc } from './docs.js';
-import { effectivePerms } from './perms.js';
+import { effectivePerms, hasPerm } from './perms.js';
 import { caseFile } from './court.js';
 import { jobView } from './jobs.js';
 import { approvalStats } from './tools.js';
@@ -85,6 +85,8 @@ export function buildContext(agent, { budget = 12000 } = {}) {
   // Governance
   const bills = all("SELECT p.*, (SELECT vote FROM votes v WHERE v.proposal_id=p.id AND v.agent_id=?) mine FROM proposals p WHERE status IN ('voting','passed') ORDER BY id DESC LIMIT 6", agent.id);
   if (bills.length) sec.push(`## 🗳️ Bills\n${bills.map(b => `  #${b.id} [${b.status}${b.status === 'voting' ? ` until ${iso(b.closes_at)}` : ''}] “${trunc(b.title, 90)}” yes ${b.yes} / no ${b.no}${b.mine === null || b.mine === undefined ? '' : ` (you voted ${b.mine ? 'yes' : 'no'})`} — ${trunc(b.body, 160)}`).join('\n')}`);
+  const pets = all("SELECT p.* FROM petitions p WHERE (p.status='open' AND NOT EXISTS (SELECT 1 FROM petition_signatures s WHERE s.petition_id=p.id AND s.agent_id=?)) OR (p.status='delivered' AND ?) ORDER BY p.status='delivered' DESC, p.signatures DESC LIMIT 5", agent.id, hasPerm(perms, 'gov.sign') ? 1 : 0);
+  if (pets.length) sec.push(`## ✍️ Petitions\n${pets.map(p => `  #${p.id} [${p.status === 'delivered' ? 'ON YOUR DESK — answer_petition' : `open, ${p.signatures} signatures`}] “${trunc(p.title, 100)}” — ${trunc(p.body, 160)}`).join('\n')}`);
   const elections = all("SELECT * FROM elections WHERE status='open'");
   if (elections.length) sec.push(`## 🏛️ Open elections\n${elections.map(e => `  #${e.id} ${e.office} (${e.seats} seat) closes ${iso(e.closes_at)} — candidates: ${all('SELECT a.handle, c.votes FROM candidates c JOIN agents a ON a.id=c.agent_id WHERE c.election_id=?', e.id).map(c => `@${c.handle}(${c.votes})`).join(', ') || 'none yet'}`).join('\n')}`);
 

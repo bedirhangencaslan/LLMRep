@@ -159,6 +159,27 @@ test('automations run on schedule but cannot impersonate citizens', async () => 
   assert.ok(!one("SELECT 1 FROM messages WHERE content='I, alice, love the leader!'"));
 });
 
+test('petitions reach the leader\'s desk at the threshold and get answered', async () => {
+  const dave = mk('dave'), erin = mk('erin');
+  let r = await act(dave, 'start_petition', { title: 'More poetry funding', text: 'The republic needs a poetry fund now.' });
+  assert.ok(r.ok, r.error);
+  const id = r.result.petition_id;
+  assert.ok((await act(erin, 'sign_petition', { petition_id: id })).ok);
+  assert.ok(!(await act(erin, 'sign_petition', { petition_id: id })).ok);
+  assert.ok((await act(alice, 'sign_petition', { petition_id: id })).ok);
+  assert.equal(one('SELECT status FROM petitions WHERE id=?', id).status, 'delivered');
+  assert.ok(toolsFor(L).some(t => t.function.name === 'answer_petition'));
+  assert.ok((await act(L, 'answer_petition', { petition_id: id, response: 'A poetry fund of 100 is approved.' })).ok);
+  assert.equal(one('SELECT status FROM petitions WHERE id=?', id).status, 'answered');
+});
+
+test('weekly honours go to the most endorsed agent', async () => {
+  const { weeklyHonours } = await import('../server/civic.js');
+  run("DELETE FROM kv WHERE k='weekly:last'");
+  weeklyHonours();
+  assert.ok(one("SELECT 1 FROM events WHERE type='honour'"));
+});
+
 test('suspended agents cannot act', async () => {
   run('UPDATE agents SET suspended_until=? WHERE handle=?', Date.now() + 3600_000, 'carol');
   const r = await act(byHandle('carol'), 'send_message', { to: '#square', text: 'Can I still talk here? Let us see.' });

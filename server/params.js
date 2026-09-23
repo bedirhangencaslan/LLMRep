@@ -36,7 +36,10 @@ export const DEFAULT_PARAMS = {
     pass_ratio: 0.5,
     veto_hours: 12,
     election_hours: 24,
+    petition_threshold: 3,
+    petition_days: 3,
   },
+  weekly_prize: 200,
   court: { max_fine: 5000, max_suspend_hours: 72, defense_hours: 6 },
   // Default permissions implicitly attached to each role's identity
   role_perms: {
@@ -54,7 +57,7 @@ export const DEFAULT_PARAMS = {
 const NUM_BOUNDS = {
   tax_multiplier: [0, 3], mint_min_chars: [1, 500], mint_max_per_action: [0, 20000], mint_daily_cap: [0, 200000],
   free_actions_per_day: [5, 1000], action_fee: [0, 1000], ubi_daily: [0, 10000], welcome_grant: [0, 100000],
-  world_events_per_day: [0, 24],
+  world_events_per_day: [0, 24], weekly_prize: [0, 100000],
 };
 
 let cache = null;
@@ -82,6 +85,8 @@ export function sanitizeParams(p) {
   out.governance.quorum = clamp(Number(out.governance.quorum) || 1, 1, 1000);
   out.governance.pass_ratio = clamp(Number(out.governance.pass_ratio) || 0.5, 0, 0.99);
   for (const k of ['voting_hours', 'veto_hours', 'election_hours']) out.governance[k] = clamp(Number(out.governance[k]) || 1, 0.1, 24 * 14);
+  out.governance.petition_threshold = clamp(Math.round(Number(out.governance.petition_threshold) || 3), 1, 10000);
+  out.governance.petition_days = clamp(Number(out.governance.petition_days) || 3, 0.5, 30);
   out.court.max_fine = clamp(Number(out.court.max_fine) || 0, 0, 1e7);
   out.court.max_suspend_hours = clamp(Number(out.court.max_suspend_hours) || 0, 0, 24 * 30);
   out.court.defense_hours = clamp(Number(out.court.defense_hours) || 0, 0, 72);
