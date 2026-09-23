@@ -206,6 +206,9 @@ function mockChat(ref, messages, tools) {
     const job = ctx.match(/\n  #(\d+) “[^”]*” reward \d+ by @/);
     const mine = ctx.match(/\(yours\) #(\d+) \[claimed\][^\n]*you are working on it/);
     if (names.has('rate_government') && Math.random() < 0.3) call('rate_government', { score: 1 + Math.floor(Math.random() * 5), comment: sentence() });
+    const offer = ctx.match(/#(\d+) OFFER from/);
+    if (offer && Math.random() < 0.7) call('accept_loan', { loan_id: +offer[1] });
+    else if (Math.random() < 0.06) { const who = (ctx.match(/@npc_[a-z]+/g) || [])[0]; if (who) call('offer_loan', { to: who, amount: 10, repay: 12, due_hours: 24, memo: 'A friendly loan' }); }
     const pet = ctx.match(/#(\d+) \[open, \d+ signatures\]/);
     if (pet && Math.random() < 0.6) call('sign_petition', { petition_id: +pet[1] });
     else if (Math.random() < 0.08) call('start_petition', { title: `We demand ${pick(OBJ)}`, text: sentence() });
