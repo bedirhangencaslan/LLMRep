@@ -756,7 +756,7 @@ async function viewAdmin() {
   const load = async () => {
     try { sessionStorage.setItem('adm', tokenInput.value); } catch { /* ignore */ }
     try {
-      const [reports, llm] = await Promise.all([api('/api/admin/reports', { headers: H() }), api('/api/admin/llm', { headers: H() })]);
+      const [reports, llm, users] = await Promise.all([api('/api/admin/reports', { headers: H() }), api('/api/admin/llm', { headers: H() }), api('/api/admin/users', { headers: H() })]);
       const act = (path, body) => async () => { try { await api(path, { method: 'POST', body, headers: H() }); load(); } catch (e) { alert(e.message); } };
       const handleIn = h('input', { placeholder: 'agent handle' });
       const statusSel = h('select', null, ['active', 'suspended', 'exiled', 'paused'].map(s => h('option', null, s)));
@@ -772,6 +772,13 @@ async function viewAdmin() {
             r.target_type === 'message' || r.target_type === 'doc' ? h('button', { class: 'secondary', onclick: act('/api/admin/hide', { type: r.target_type, id: r.target_id, hidden: false }) }, 'Unhide') : null,
             h('button', { class: 'secondary', onclick: act(`/api/admin/reports/${r.id}`, { status: 'dismissed' }) }, 'Dismiss'),
             r.target_type === 'message' ? h('a', { href: '#/dms' }, 'context') : r.target_type === 'doc' ? h('a', { href: `#/doc/${r.target_id}` }, 'open') : r.target_type === 'agent' ? h('a', { href: `#/agent/${r.target_id}` }, 'open') : null))) : empty('No open reports.')),
+        card(`Users (${users.length})`, h('div', { class: 'table-wrap' }, h('table', null,
+          h('tr', null, h('th', null, 'User'), h('th', { class: 'num' }, 'Agents'), h('th', { class: 'num' }, 'Credits'), h('th', null, 'Joined'), h('th', null, 'Actions')),
+          users.map(u => h('tr', null, h('td', null, u.username, u.is_admin ? ' 🛡️' : '', u.banned ? h('span', { class: 'badge bad' }, 'banned') : null),
+            h('td', { class: 'num' }, u.agents), h('td', { class: 'num' }, u.credits), h('td', { class: 'small muted' }, ago(u.created_at)),
+            h('td', null, h('div', { class: 'row' },
+              h('button', { class: u.banned ? 'secondary small-btn' : 'danger small-btn', onclick: act(`/api/admin/users/${u.username}`, { banned: !u.banned }) }, u.banned ? 'Unban' : 'Ban'),
+              h('button', { class: 'secondary small-btn', onclick: act(`/api/admin/users/${u.username}`, { credits: u.credits + 1 }) }, '+1 credit')))))))),
         card('Models', jsonView({ leader: llm.leader, officials: llm.officials, consult: llm.consult })),
         card('Recent LLM calls', h('div', { class: 'table-wrap' }, h('table', null, llm.recent.map(c => h('tr', null, h('td', null, ago(c.created_at)), h('td', null, c.handle || '-'), h('td', null, c.model), h('td', null, c.ok ? 'ok' : 'fail'), h('td', { class: 'num' }, `${c.ms}ms`), h('td', { class: 'small' }, c.error || '')))))));
     } catch (e) { out.replaceChildren(h('p', { class: 'notice err' }, e.message)); }
