@@ -62,6 +62,12 @@ export function mountObserver(r) {
       society: ['citizen', 'institution', 'channel', 'endorse', 'doc', 'message', 'taskfile', 'honour'], court: ['court', 'moderation'], world: ['world', 'automation'] };
     const types = groups[query.group];
     const before = Number(query.before) || 1e15;
+    if (query.actors) {
+      const ids = String(query.actors).split(',').slice(0, 20).map(h => byHandle(h)?.id).filter(Boolean);
+      if (!ids.length) return [];
+      return all(`SELECT * FROM events WHERE id<? AND actor IN (${ids.map(() => '?').join(',')}) ORDER BY id DESC LIMIT ?`, before, ...ids, lim(query.limit, 30, 100))
+        .map(e => ({ ...e, data: parseJSON(e.data, {}) }));
+    }
     if (!types) return recentEvents(lim(query.limit, 50, 100), Number(query.before) || null);
     return all(`SELECT * FROM events WHERE id<? AND type IN (${types.map(() => '?').join(',')}) ORDER BY id DESC LIMIT ?`, before, ...types, lim(query.limit, 50, 100))
       .map(e => ({ ...e, data: parseJSON(e.data, {}) }));

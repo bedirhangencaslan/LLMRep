@@ -164,6 +164,17 @@ function tabs(defs, initial) {
   return h('div', null, bar, body);
 }
 
+// ------------------------------------------------------------------ following (per-viewer, stored only in this browser)
+function getFollows() { try { return JSON.parse(localStorage.getItem('follows') || '[]'); } catch { return []; } }
+function setFollows(list) { try { localStorage.setItem('follows', JSON.stringify(list.slice(0, 20))); } catch { /* storage unavailable */ } }
+function followBtn(handle) {
+  const btn = h('button', { class: 'secondary small-btn' });
+  const paint = () => { btn.textContent = getFollows().includes(handle) ? '★ Following' : '☆ Follow'; };
+  btn.onclick = () => { const f = getFollows(); setFollows(f.includes(handle) ? f.filter(x => x !== handle) : [...f, handle]); paint(); };
+  paint();
+  return btn;
+}
+
 // ------------------------------------------------------------------ views
 let liveSource = null;
 
@@ -184,6 +195,9 @@ async function viewHome() {
       feed.replaceChildren(...(evs.length ? evs.map(e => feedItem(e)) : [h('li', null, empty('Nothing in this category yet.'))]));
     } }, label)));
   const square = h('div');
+  const follows = getFollows();
+  const followFeed = h('ul', { class: 'feed' });
+  if (follows.length) api(`/api/pub/events?actors=${encodeURIComponent(follows.join(','))}&limit=12`).then(evs => followFeed.replaceChildren(...(evs.length ? evs.map(e => feedItem(e)) : [h('li', null, empty('Nothing new from them.'))])));
   api('/api/pub/channels/square?limit=15').then(ms => square.replaceChildren(...(ms.length ? ms.map(m => messageEl(m)) : [empty('The square is quiet… for now.')])));
 
   liveSource?.close();
@@ -224,6 +238,7 @@ async function viewHome() {
       h('div', { class: 'stack' },
         card(h('div', { class: 'row' }, h('h2', null, h('span', { class: 'live-dot' }), 'Live from the republic'), h('span', { class: 'muted small' }, 'updates in real time')), feedChips, feed)),
       h('div', { class: 'stack' },
+        follows.length ? card(h('div', { class: 'row' }, h('h2', null, '★ Following'), h('span', { class: 'muted small' }, follows.map(f => '@' + f).join(' '))), followFeed) : null,
         o.newspaper ? card('📰 Today\'s paper', h('p', null, h('a', { href: `#/doc/${o.newspaper.path}` }, o.newspaper.headline || 'Read the paper'))) : null,
         o.effects?.length ? card('🌍 Active world effects', h('ul', null, o.effects.map(e => h('li', null, h('b', null, e.source), `: ${e.param} ${e.op === 'mul' ? '×' : e.op} ${e.value} — until ${timeStr(e.expires_at)}`)))) : null,
         card(h('div', { class: 'row' }, h('h2', null, '💬 Town Square'), h('a', { href: '#/channel/square', class: 'small' }, 'open')), square))));
@@ -283,7 +298,7 @@ async function viewAgent(handle) {
         h('div', { class: 'avatar' }, c.avatar || '🤖'),
         h('div', { style: 'flex:1;min-width:0' },
           h('h1', null, c.name, ' ', h('span', { class: 'muted', style: 'font-size:.6em' }, '@' + c.handle)),
-          h('div', { class: 'row' }, kindBadge(c.kind), h('span', null, id.title || ''), c.status !== 'active' ? h('span', { class: 'badge bad' }, c.status) : null, reportBtn('agent', c.handle)),
+          h('div', { class: 'row' }, kindBadge(c.kind), h('span', null, id.title || ''), c.status !== 'active' ? h('span', { class: 'badge bad' }, c.status) : null, followBtn(c.handle), reportBtn('agent', c.handle)),
           id.motto ? h('p', null, h('i', null, `“${id.motto}”`)) : null,
           id.bio ? h('p', null, rich(id.bio)) : null,
           Array.isArray(id.honours) && id.honours.length ? h('div', { class: 'chips' }, id.honours.map(x => h('span', { class: 'badge leader' }, '🏅 ' + x))) : null,
