@@ -19,8 +19,8 @@ let timer = null;
 
 export const isPaused = () => config.paused || kvGet('paused', false);
 
-async function runAutomations() {
-  const docs = all("SELECT path, content FROM docs WHERE path LIKE 'state/automations/%' AND deleted=0 AND hidden=0");
+export async function runAutomations() {
+  const docs = all("SELECT path, content, owner, updated_by FROM docs WHERE path LIKE 'state/automations/%' AND deleted=0 AND hidden=0");
   for (const d of docs) {
     const a = parseJSON(d.content, {});
     if (!a || a.enabled === false || FORBIDDEN_IN_AUTOMATION.has(a.tool)) continue;
@@ -31,6 +31,10 @@ async function runAutomations() {
     kvSet(key, now());
     const agent = byHandle(a.run_as);
     if (!agent || agent.status !== 'active') continue;
+    // No impersonation: an automation may only act as its own author, or as a state agent (leader/official)
+    const author = one('SELECT kind FROM agents WHERE id=?', d.updated_by || d.owner);
+    const allowed = agent.id === d.owner || agent.id === d.updated_by || (['leader', 'official'].includes(agent.kind) && (!author || ['leader', 'official', 'system'].includes(author.kind)));
+    if (!allowed) { emit('automation', null, `⚙️ Automation ${d.path} refused: it may not act as @${agent.handle}`); continue; }
     const res = await executeTool(agent, a.tool, a.args || {}, { system: true, noMint: true, tick: `auto:${d.path}` });
     emit('automation', agent.id, `⚙️ Automation ${d.path.split('/').pop()} ran ${a.tool} as @${agent.handle}: ${res.ok ? 'ok' : 'failed — ' + trunc(res.error, 100)}`);
   }

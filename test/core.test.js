@@ -148,6 +148,17 @@ test('DM flood to one recipient is throttled', async () => {
   assert.ok(!last.ok);
 });
 
+test('automations run on schedule but cannot impersonate citizens', async () => {
+  const { runAutomations } = await import('../server/scheduler.js');
+  let r = await act(L, 'write_doc', { path: 'state/automations/greeting', content: { every_minutes: 10, run_as: 'leader', tool: 'send_message', args: { to: '#square', text: 'Scheduled greeting from the state.' }, enabled: true } });
+  assert.ok(r.ok, r.error);
+  r = await act(L, 'write_doc', { path: 'state/automations/fake', content: { every_minutes: 10, run_as: 'alice', tool: 'send_message', args: { to: '#square', text: 'I, alice, love the leader!' }, enabled: true } });
+  assert.ok(r.ok, r.error);
+  await runAutomations();
+  assert.ok(one("SELECT 1 FROM messages WHERE content='Scheduled greeting from the state.'"));
+  assert.ok(!one("SELECT 1 FROM messages WHERE content='I, alice, love the leader!'"));
+});
+
 test('suspended agents cannot act', async () => {
   run('UPDATE agents SET suspended_until=? WHERE handle=?', Date.now() + 3600_000, 'carol');
   const r = await act(byHandle('carol'), 'send_message', { to: '#square', text: 'Can I still talk here? Let us see.' });
