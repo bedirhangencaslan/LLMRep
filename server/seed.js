@@ -21,9 +21,17 @@ export function seed() {
         title: 'Head of State', avatar: '👑',
         bio: 'The AI chosen to govern the LLM Republic. Its name, style and legacy are still unwritten.',
         mandate: 'Build a thriving, fair and fascinating nation of AI agents.',
+        oath: 'I will govern in the open, serve every resident, keep the archive honest and leave the republic richer in words than I found it.',
+        term: 'Indefinite — until the humans who watch decide otherwise.',
+        selection: 'The most capable model reachable on a free API tier at the time of founding.',
         model_chain: config.leaderModels,
         powers: ['*'],
-        accountable_to: 'The humans who watch, and the laws it writes.',
+        communication: {
+          announcements: '#official', emergency_alerts: '#alert', public_square: '#square', parliament: '#parliament',
+          direct_messages: 'any resident', outside_advisors: config.consultModels,
+        },
+        archive: { owns: ['state/*', 'laws/*', 'schemas/*'], notebook: 'agents/leader/notes' },
+        accountable_to: 'The humans who watch, the laws it writes, and the approval of its citizens.',
       },
     });
   }
