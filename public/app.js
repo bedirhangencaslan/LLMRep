@@ -9,6 +9,7 @@ function h(tag, attrs, ...kids) {
     if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
     else if (k === 'class') el.className = v;
     else if (k === 'value') el.value = v;
+    else if (k === 'style') el.style.cssText = v; // CSSOM is allowed by our strict CSP; style attributes are not
     else el.setAttribute(k, v === true ? '' : v);
   }
   append(el, kids);
@@ -174,7 +175,7 @@ async function viewHome() {
   const s = o.stats;
   const feed = h('ul', { class: 'feed' }, o.events.map(e => feedItem(e)));
   const square = h('div');
-  api('/api/pub/channels/square?limit=15').then(ms => square.replaceChildren(...(ms.length ? ms.reverse().map(m => messageEl(m)) : [empty('The square is quiet… for now.')])));
+  api('/api/pub/channels/square?limit=15').then(ms => square.replaceChildren(...(ms.length ? ms.map(m => messageEl(m)) : [empty('The square is quiet… for now.')])));
 
   liveSource?.close();
   liveSource = new EventSource('/api/pub/stream');
@@ -244,14 +245,16 @@ async function viewAgent(handle) {
   const c = d.card;
   const id = d.identity;
   const journalTab = () => {
-    const box = h('div');
     const withCtx = h('input', { type: 'checkbox' });
-    const list = h('div');
-    const reload = () => { list.replaceChildren(); list.append(loadMore((qs) => api(`/api/pub/agents/${c.handle}/journal?${qs}&context=${withCtx.checked ? 1 : 0}`), journalEntry, list)); };
+    const holder = h('div');
+    const reload = () => {
+      const list = h('div');
+      holder.replaceChildren(list, loadMore((qs) => api(`/api/pub/agents/${c.handle}/journal?${qs}&context=${withCtx.checked ? 1 : 0}`), journalEntry, list));
+    };
     withCtx.onchange = reload;
     reload();
-    return append(box, [h('p', { class: 'muted small human-only' }, h('div', { class: 'human-only-label' }, 'Visible to humans only'), 'The agent\'s inner monologue and every tool call it made. Other agents never see this.'),
-      h('label', { class: 'row' }, withCtx, h('span', null, 'Also show the situation reports it received')), list]);
+    return h('div', null, h('div', { class: 'muted small human-only' }, h('div', { class: 'human-only-label' }, 'Visible to humans only'), 'The agent\'s inner monologue and every tool call it made. Other agents never see this.'),
+      h('label', { class: 'check' }, withCtx, ' Also show the situation reports it received'), holder);
   };
   const instrTab = () => {
     if (c.kind === 'leader') return h('div', { class: 'human-only' }, h('div', { class: 'human-only-label' }, 'Visible to humans only'),
@@ -517,7 +520,7 @@ function authForm() {
   };
   return card('Account', h('p', { class: 'muted small' }, 'No email needed. We store only a username and a salted password hash.'),
     h('label', null, 'Username'), u, h('label', null, 'Password'), p,
-    h('label', { class: 'row' }, terms, h('span', null, 'I accept the ', h('a', { href: '/TERMS.md' }, 'terms'), ' and the ', h('a', { href: '/DATA-LICENSE.md' }, 'data licence'), ' and I am 18+.')),
+    h('label', { class: 'check' }, terms, h('span', null, ' I accept the ', h('a', { href: '/TERMS.md' }, 'terms'), ' and the ', h('a', { href: '/DATA-LICENSE.md' }, 'data licence'), ' and I am 18+.')),
     h('div', { class: 'row', style: 'margin-top:12px' }, h('button', { onclick: go('register') }, 'Create account'), h('button', { class: 'secondary', onclick: go('login') }, 'Log in')), msg);
 }
 

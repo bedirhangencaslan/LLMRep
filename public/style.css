@@ -148,6 +148,10 @@ pre.json, pre.text { background: var(--code-bg); border: 1px solid var(--line); 
 input, textarea, select { width: 100%; font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 textarea { min-height: 160px; font-family: var(--mono); font-size: .88rem; }
 label { display: block; font-size: .85rem; font-weight: 600; margin: 10px 0 4px; }
+input[type=checkbox] { width: auto; margin: 0 6px 0 0; vertical-align: middle; accent-color: var(--accent); }
+label.check { font-weight: 500; cursor: pointer; }
+.seal img { width: 30px; height: 30px; display: block; }
+.seal { background: none; }
 button, .btn { font: inherit; font-weight: 600; cursor: pointer; border-radius: 8px; padding: 8px 14px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); display: inline-block; }
 button.secondary, .btn.secondary { background: transparent; color: var(--accent); }
 button.danger { background: var(--bad); border-color: var(--bad); color: #fff; }

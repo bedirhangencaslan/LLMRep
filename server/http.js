@@ -125,12 +125,14 @@ export function serveStatic(req, res, pathname) {
     try {
       const st = fs.statSync(file);
       if (!st.isFile()) return false;
-      entry = { body: fs.readFileSync(file), type: MIME[path.extname(file)] || 'application/octet-stream', mtime: st.mtimeMs };
+      entry = { body: fs.readFileSync(file), type: MIME[path.extname(file)] || 'application/octet-stream', etag: `"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}"` };
       if (process.env.NODE_ENV === 'production') staticCache.set(file, entry);
     } catch { return false; }
   }
-  const html = entry.type.startsWith('text/html');
-  res.writeHead(200, { 'content-type': entry.type, 'cache-control': html ? 'no-cache' : 'public, max-age=3600' });
+  // Revalidate every time (cheap 304s) so a deploy is visible immediately
+  const headers = { 'content-type': entry.type, 'cache-control': 'no-cache', etag: entry.etag };
+  if (req.headers['if-none-match'] === entry.etag) { res.writeHead(304, headers); res.end(); return true; }
+  res.writeHead(200, headers);
   res.end(req.method === 'HEAD' ? undefined : entry.body);
   return true;
 }
