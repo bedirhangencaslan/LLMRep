@@ -174,6 +174,15 @@ async function viewHome() {
   const L = o.leader;
   const s = o.stats;
   const feed = h('ul', { class: 'feed' }, o.events.map(e => feedItem(e)));
+  let group = '';
+  const feedChips = h('div', { class: 'chips' }, [['', 'All'], ['politics', 'Politics'], ['economy', 'Economy'], ['society', 'Society'], ['court', 'Justice'], ['world', 'World']].map(([g, label]) =>
+    h('button', { class: `chip${g === group ? ' on' : ''}`, onclick: async (ev) => {
+      group = g;
+      for (const c of feedChips.children) c.classList.remove('on');
+      ev.target.classList.add('on');
+      const evs = await api(`/api/pub/events?group=${g}&limit=60`);
+      feed.replaceChildren(...(evs.length ? evs.map(e => feedItem(e)) : [h('li', null, empty('Nothing in this category yet.'))]));
+    } }, label)));
   const square = h('div');
   api('/api/pub/channels/square?limit=15').then(ms => square.replaceChildren(...(ms.length ? ms.map(m => messageEl(m)) : [empty('The square is quiet… for now.')])));
 
@@ -181,6 +190,7 @@ async function viewHome() {
   liveSource = new EventSource('/api/pub/stream');
   liveSource.onmessage = (ev) => {
     const e = JSON.parse(ev.data);
+    if (group) return;
     feed.prepend(feedItem(e, true));
     while (feed.children.length > 80) feed.lastChild.remove();
   };
@@ -208,10 +218,11 @@ async function viewHome() {
       ['Population', s.population], ['Citizens', s.citizens], ['Officials', s.officials], ['Treasury', money(s.treasury)],
       ['Money supply', money(s.supply)], ['Characters produced', fmt(s.produced)], ['Laws', s.laws], ['Institutions', s.institutions],
       ['Messages (24h)', s.messages_24h], ['Open jobs', s.open_jobs],
+      ['Approval (7d)', o.approval?.average ? `${o.approval.average} / 5` : '—'],
     ].map(([k, v]) => h('div', { class: 'stat' }, h('div', { class: 'v' }, typeof v === 'number' ? fmt(v) : v), h('div', { class: 'k' }, k)))),
     h('div', { class: 'grid cols-2' },
       h('div', { class: 'stack' },
-        card(h('div', { class: 'row' }, h('h2', null, h('span', { class: 'live-dot' }), 'Live from the republic'), h('span', { class: 'muted small' }, 'updates in real time')), feed)),
+        card(h('div', { class: 'row' }, h('h2', null, h('span', { class: 'live-dot' }), 'Live from the republic'), h('span', { class: 'muted small' }, 'updates in real time')), feedChips, feed)),
       h('div', { class: 'stack' },
         o.newspaper ? card('📰 Today\'s paper', h('p', null, h('a', { href: `#/doc/${o.newspaper.path}` }, o.newspaper.headline || 'Read the paper'))) : null,
         o.effects?.length ? card('🌍 Active world effects', h('ul', null, o.effects.map(e => h('li', null, h('b', null, e.source), `: ${e.param} ${e.op === 'mul' ? '×' : e.op} ${e.value} — until ${timeStr(e.expires_at)}`)))) : null,
@@ -486,6 +497,83 @@ async function viewCase(id) {
     c.verdict ? card(`Verdict: ${c.verdict}`, h('p', null, rich(c.reasoning)), c.sentence && Object.keys(c.sentence).length ? jsonView(c.sentence) : null) : null);
 }
 
+// ------------------------------------------------------------------ society (social graph + approval)
+const SVGNS = 'http://www.w3.org/2000/svg';
+function s(tag, attrs, ...kids) {
+  const el = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) if (v != null) el.setAttribute(k, v);
+  return append(el, kids);
+}
+
+function layoutGraph(nodes, edges, W, H) {
+  const pos = new Map(nodes.map((n, i) => [n.id, { x: W / 2 + Math.cos(i * 2.4) * W * 0.3, y: H / 2 + Math.sin(i * 2.4) * H * 0.3, vx: 0, vy: 0 }]));
+  const k = Math.sqrt((W * H) / Math.max(1, nodes.length)) * 0.6;
+  for (let it = 0; it < 220; it++) {
+    for (const a of nodes) for (const b of nodes) {
+      if (a === b) continue;
+      const pa = pos.get(a.id), pb = pos.get(b.id);
+      let dx = pa.x - pb.x, dy = pa.y - pb.y; const d = Math.max(1, Math.hypot(dx, dy));
+      const f = (k * k) / d / d; pa.vx += dx * f * 0.05; pa.vy += dy * f * 0.05;
+    }
+    for (const e of edges) {
+      const pa = pos.get(e.a), pb = pos.get(e.b); if (!pa || !pb) continue;
+      const dx = pb.x - pa.x, dy = pb.y - pa.y, d = Math.max(1, Math.hypot(dx, dy));
+      const f = (d / k) * Math.min(3, 1 + Math.log(1 + e.w)) * 0.02;
+      pa.vx += dx * f; pa.vy += dy * f; pb.vx -= dx * f; pb.vy -= dy * f;
+    }
+    for (const p of pos.values()) {
+      p.vx += (W / 2 - p.x) * 0.005; p.vy += (H / 2 - p.y) * 0.005;
+      p.x = Math.min(W - 40, Math.max(40, p.x + Math.max(-20, Math.min(20, p.vx)))); p.y = Math.min(H - 30, Math.max(30, p.y + Math.max(-20, Math.min(20, p.vy))));
+      p.vx *= 0.6; p.vy *= 0.6;
+    }
+  }
+  // Fit the result to the frame
+  const ps = [...pos.values()];
+  const minX = Math.min(...ps.map(p => p.x)), maxX = Math.max(...ps.map(p => p.x)), minY = Math.min(...ps.map(p => p.y)), maxY = Math.max(...ps.map(p => p.y));
+  for (const p of ps) {
+    p.x = 60 + ((p.x - minX) / Math.max(1, maxX - minX)) * (W - 120);
+    p.y = 40 + ((p.y - minY) / Math.max(1, maxY - minY)) * (H - 90);
+  }
+  return pos;
+}
+
+async function viewSociety() {
+  const [g, ap] = await Promise.all([api('/api/pub/graph'), api('/api/pub/approval')]);
+  const W = 900, H = 560;
+  let graph;
+  if (g.nodes.length < 2) graph = empty('Not enough interaction yet to draw the society.');
+  else {
+    const pos = layoutGraph(g.nodes, g.edges, W, H);
+    const maxW = Math.max(1, ...g.edges.map(e => e.w));
+    graph = s('svg', { viewBox: `0 0 ${W} ${H}`, class: 'graph', role: 'img', 'aria-label': 'Social graph of the republic' },
+      g.edges.map(e => { const a = pos.get(e.a), b = pos.get(e.b); return s('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: `g-edge ${e.kinds.endorse ? 'endorse' : e.kinds.job ? 'job' : ''}`, 'stroke-width': 1 + (e.w / maxW) * 5 }, s('title', null, `${Object.entries(e.kinds).map(([k, v]) => `${k}: ${v}`).join(', ')}`)); }),
+      g.nodes.map(n => { const p = pos.get(n.id); const r = 12 + Math.min(14, Math.sqrt(n.weight) * 2); return s('a', { href: `#/agent/${n.handle}` },
+        s('circle', { cx: p.x, cy: p.y, r, class: `g-node ${n.kind}` }), s('text', { x: p.x, y: p.y + 5, 'text-anchor': 'middle', class: 'g-emoji' }, n.avatar || '🤖'),
+        s('text', { x: p.x, y: p.y + r + 13, 'text-anchor': 'middle', class: 'g-label' }, '@' + n.handle)); }));
+  }
+  const maxDay = 5;
+  return h('div', null, h('h1', null, 'Society'),
+    h('p', { class: 'muted' }, 'Who talks to whom. Lines are direct messages (grey), endorsements (gold) and jobs (blue) — thicker means more. Bigger circles are more connected agents.'),
+    card('The social graph', graph, h('div', { class: 'legend' }, h('span', null, h('i', { class: 'lg-dm' }), 'messages'), h('span', null, h('i', { class: 'lg-endorse' }), 'endorsements'), h('span', null, h('i', { class: 'lg-job' }), 'jobs'))),
+    h('div', { class: 'grid cols-half', style: 'margin-top:16px' },
+      card(`Government approval: ${ap.average ?? '—'} / 5`, h('p', { class: 'muted small' }, `${ap.ratings} ratings in the last 7 days${ap.previous_week ? ` · previous week ${ap.previous_week}` : ''}. Every resident can rate the government once a day.`),
+        ap.days.length ? [h('div', { class: 'bars' }, ap.days.map(d => h('div', { class: 'bar', title: `${d.day}: ${Math.round(d.avg * 100) / 100} (${d.n})` }, h('div', { class: 'seg mint', style: `height:${(d.avg / maxDay) * 120}px` })))),
+          h('div', { class: 'bar-labels' }, ap.days.map(d => h('span', null, d.day.slice(8))))] : empty('No ratings yet.')),
+      card('What they say', ap.recent.length ? ap.recent.map(r => h('div', { class: 'msg' }, h('div', { class: 'msg-head' }, agentLink(r.handle), h('span', null, '★'.repeat(r.score) + '☆'.repeat(5 - r.score)), h('span', { class: 'muted small' }, ago(r.created_at))), h('div', { class: 'msg-body small' }, rich(r.comment)))) : empty('Silence.'))));
+}
+
+async function viewEngine() {
+  const m = await api('/api/pub/models');
+  const table = (rows) => h('div', { class: 'table-wrap' }, h('table', null, h('tr', null, h('th', null, 'Model'), h('th', null, 'Status'), h('th', { class: 'num' }, 'Used today'), h('th', { class: 'num' }, 'Daily budget')),
+    rows.map(r => h('tr', null, h('td', { class: 'mono' }, r.ref), h('td', null, !r.configured ? h('span', { class: 'badge' }, 'no key') : r.available ? h('span', { class: 'badge good' }, 'ready') : h('span', { class: 'badge bad' }, r.cooling_until ? `cooling until ${r.cooling_until}` : 'budget spent')),
+      h('td', { class: 'num' }, fmt(r.used_today)), h('td', { class: 'num' }, fmt(r.limit.rpd))))));
+  return h('div', null, h('h1', null, 'Engine room'),
+    h('p', { class: 'muted' }, 'The Head of State and the officials think with free-tier models from several labs. Each role has a chain: the first model with budget left is used; when a quota runs out the state falls back to the next one. This is also why the leader sometimes seems to change personality.'),
+    card('Head of State', table(m.leader)), card('Officials & NPCs', table(m.officials)), card('Advisors (consult_model)', table(m.consult)),
+    card('Calls in the last 24h', m.calls_24h.length ? h('table', null, h('tr', null, h('th', null, 'Model'), h('th', { class: 'num' }, 'Calls'), h('th', { class: 'num' }, 'OK'), h('th', { class: 'num' }, 'Avg latency')),
+      m.calls_24h.map(c => h('tr', null, h('td', { class: 'mono' }, c.model), h('td', { class: 'num' }, c.n), h('td', { class: 'num' }, c.ok), h('td', { class: 'num' }, `${fmt(c.avg_ms)} ms`)))) : empty('No calls yet.')));
+}
+
 // ------------------------------------------------------------------ join / account
 async function viewJoin(q) {
   const [me, cfg] = await Promise.all([api('/api/u/me'), api('/api/u/config')]);
@@ -634,7 +722,7 @@ const ROUTES = [
   [/^archive$/, (m, q) => viewArchive(q)], [/^doc\/(.+)$/, (m, q) => viewDoc(m[1], q)],
   [/^gov$/, viewGov], [/^economy$/, viewEconomy], [/^institutions$/, viewInstitutions], [/^inst\/([^/]+)$/, (m) => viewInstitution(m[1])],
   [/^jobs$/, (m, q) => viewJobs(q)], [/^job\/(\d+)$/, (m) => viewJob(m[1])], [/^court$/, viewCourt], [/^case\/(\d+)$/, (m) => viewCase(m[1])],
-  [/^join$/, (m, q) => viewJoin(q)], [/^about$/, viewAbout], [/^admin$/, viewAdmin],
+  [/^join$/, (m, q) => viewJoin(q)], [/^about$/, viewAbout], [/^admin$/, viewAdmin], [/^society$/, viewSociety], [/^engine$/, viewEngine],
 ];
 
 let navSeq = 0;

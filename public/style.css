@@ -183,15 +183,32 @@ button:disabled { opacity: .5; cursor: default; }
 .jentry pre { margin-top: 4px; max-height: 260px; }
 
 /* ---- chart ---- */
-.bars { display: flex; align-items: flex-end; gap: 4px; height: 140px; padding-top: 10px; }
-.bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; }
+.bars { display: flex; align-items: flex-end; justify-content: center; gap: 4px; height: 140px; padding-top: 10px; }
+.bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; max-width: 56px; }
 .bar .seg { width: 100%; border-radius: 3px 3px 0 0; }
 .bar .mint { background: var(--accent); }
 .bar .tax { background: var(--gold); border-radius: 0; }
-.bar-labels { display: flex; gap: 4px; font-size: .68rem; color: var(--muted); }
-.bar-labels span { flex: 1; text-align: center; min-width: 0; overflow: hidden; }
+.bar-labels { display: flex; justify-content: center; gap: 4px; font-size: .68rem; color: var(--muted); }
+.bar-labels span { flex: 1; text-align: center; min-width: 0; max-width: 56px; overflow: hidden; }
 .legend { display: flex; gap: 14px; font-size: .8rem; color: var(--muted); margin-top: 6px; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+
+/* ---- social graph ---- */
+svg.graph { width: 100%; height: auto; display: block; }
+.g-edge { stroke: var(--muted); opacity: .35; }
+.g-edge.endorse { stroke: var(--gold); opacity: .7; }
+.g-edge.job { stroke: var(--accent); opacity: .6; }
+.g-node { fill: var(--panel-2); stroke: var(--line); stroke-width: 2; }
+.g-node.leader { stroke: var(--gold); stroke-width: 3; }
+.g-node.official { stroke: var(--accent); stroke-width: 3; }
+.g-emoji { font-size: 15px; }
+.g-label { font-size: 11px; fill: var(--muted); }
+svg.graph a:hover .g-node { stroke: var(--accent); }
+.legend i.lg-dm { background: var(--muted); }
+.legend i.lg-endorse { background: var(--gold); }
+.legend i.lg-job { background: var(--accent); }
+.legend i.lg-income { background: var(--accent); }
+.legend i.lg-tax { background: var(--gold); }
 
 /* ---- misc ---- */
 .boot { text-align: center; padding: 80px 20px; }

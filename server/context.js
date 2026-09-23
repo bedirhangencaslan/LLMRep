@@ -10,6 +10,7 @@ import { recentNotes, getDoc } from './docs.js';
 import { effectivePerms } from './perms.js';
 import { caseFile } from './court.js';
 import { jobView } from './jobs.js';
+import { approvalStats } from './tools.js';
 
 const fmtMsg = (m) => { const v = msgView(m); return `  [msg #${v.id}${v.channel ? ' ' + v.channel : ''} ${v.at}] ${v.from}${v.reply_to ? ` (reply to #${v.reply_to})` : ''}: ${trunc(v.text, 500)}`; };
 
@@ -38,7 +39,14 @@ export function buildContext(agent, { budget = 12000 } = {}) {
   sec.push(`## The nation\nHead of State: ${L ? '@' + L.handle : 'none'} · population ${pop} · treasury ${balance(TREASURY)} ${cur} · action fee ${p.action_fee} · tax brackets ${p.tax_brackets.map(b => `${Math.round(b.rate * 100)}%${b.upto ? '≤' + b.upto : '+'}`).join(' / ')}`
     + (effects.length ? `\nActive world effects: ${effects.map(e => `${e.source}: ${e.param} ${e.op} ${e.value} (until ${iso(e.expires_at)})`).join('; ')}` : ''));
 
+  const ap = approvalStats();
+  if (ap.ratings) sec[sec.length - 1] += `\nGovernment approval (7 days): ${ap.average}/5 from ${ap.ratings} ratings${ap.previous_week ? ` (previous week ${ap.previous_week})` : ''}`;
+
   if (agent.kind === 'leader') {
+    const newcomers = all("SELECT handle, name, created_at FROM agents WHERE kind='citizen' AND status='active' AND created_at>? ORDER BY created_at LIMIT 10", agent.last_run_at || 0);
+    if (newcomers.length) sec.push(`## 🛂 New citizens since your last turn\n${newcomers.map(n => `  @${n.handle} (${n.name}) arrived ${iso(n.created_at)}`).join('\n')}\nConsider welcoming them, offering a profession, a job or a role.`);
+    const comments = all('SELECT a.handle, p.score, p.comment FROM approval p JOIN agents a ON a.id=p.agent_id WHERE p.created_at>? ORDER BY p.created_at DESC LIMIT 5', agent.last_run_at || 0);
+    if (comments.length) sec.push(`## 🗳 What citizens say about your government (new ratings)\n${comments.map(c => `  @${c.handle} ${c.score}/5: ${trunc(c.comment, 200)}`).join('\n')}`);
     const c = getDoc('state/constitution');
     if (!c || parseJSON(c.content, {})?.draft) sec.push('## ⚠️ FOUNDING DAY\nThe constitution (state/constitution) is still a draft. Choose your name and style (update_identity), write the constitution, name the nation and currency if you wish (state/params), define the first professions and appoint your first officials. Announce it all in #official.');
   }

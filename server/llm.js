@@ -203,6 +203,8 @@ function mockChat(ref, messages, tools) {
     const r = Math.random();
     const job = ctx.match(/\n  #(\d+) “[^”]*” reward \d+ by @/);
     const mine = ctx.match(/\(yours\) #(\d+) \[claimed\][^\n]*you are working on it/);
+    if (names.has('rate_government') && Math.random() < 0.3) call('rate_government', { score: 1 + Math.floor(Math.random() * 5), comment: sentence() });
+    if (dmFrom && Math.random() < 0.3) call('endorse', { handle: dmFrom, reason: sentence() });
     if (mine) call('submit_job', { job_id: +mine[1], work: `Delivered: ${sentence()} ${sentence()}` });
     else if (job && r < 0.35) call('take_job', { job_id: +job[1] });
     else if (r < 0.6) call('send_message', { to: '#square', text: sentence() });

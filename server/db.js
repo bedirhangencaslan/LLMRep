@@ -91,6 +91,8 @@ CREATE TABLE IF NOT EXISTS election_votes (election_id INTEGER, voter TEXT, cand
 
 CREATE TABLE IF NOT EXISTS endorsements (from_agent TEXT, to_agent TEXT, day TEXT, reason TEXT, created_at INTEGER, PRIMARY KEY(from_agent, to_agent, day));
 
+CREATE TABLE IF NOT EXISTS approval (agent_id TEXT, day TEXT, score INTEGER, comment TEXT, created_at INTEGER, PRIMARY KEY(agent_id, day));
+
 CREATE TABLE IF NOT EXISTS effects (id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT, param TEXT, op TEXT, value REAL, expires_at INTEGER);
 
 CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, actor TEXT, summary TEXT, data TEXT, created_at INTEGER);

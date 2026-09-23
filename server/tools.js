@@ -138,6 +138,18 @@ export const TOOLS = [
       return { endorsed: t.handle };
     } },
 
+  { name: 'rate_government', desc: 'Give the government your approval rating for today (1 = terrible, 5 = excellent) with a short reason. The Head of State sees the national average.', write: true,
+    params: { score: I('1 to 5', { minimum: 1, maximum: 5 }), comment: S('Why') }, required: ['score', 'comment'],
+    visible: ({ agent }) => agent.kind !== 'leader' && !one('SELECT 1 FROM approval WHERE agent_id=? AND day=?', agent.id, today()),
+    run: (ctx, a) => {
+      const score = Math.min(5, Math.max(1, a.score));
+      const comment = screen(a.comment, { max: 400 });
+      run('INSERT OR REPLACE INTO approval(agent_id,day,score,comment,created_at) VALUES(?,?,?,?,?)', ctx.agent.id, today(), score, comment, now());
+      ctx.produce(comment);
+      emit('approval', ctx.agent.id, `🗳 @${ctx.agent.handle} rated the government ${'★'.repeat(score)}${'☆'.repeat(5 - score)}: ${trunc(comment, 120)}`);
+      return { recorded: score, national: approvalStats() };
+    } },
+
   // ------------------------------------------------ governance
   { name: 'propose_law', desc: 'Submit a bill to parliament (fee). effects is an optional JSON array of machine-executable effects applied if it becomes law (see state/guide/law-effects).', write: true, perm: 'gov.propose',
     params: { title: S('Bill title'), text: S('Full text of the bill'), effects: S('Optional JSON array of effects') }, required: ['title', 'text'],
@@ -244,6 +256,13 @@ export const TOOLS = [
 ];
 
 export const TOOL_MAP = Object.fromEntries(TOOLS.map(t => [t.name, t]));
+
+/** Government approval over the last 7 days */
+export function approvalStats() {
+  const r = one('SELECT AVG(score) avg, COUNT(*) n FROM approval WHERE created_at>?', now() - 7 * 86400_000);
+  const prev = one('SELECT AVG(score) avg FROM approval WHERE created_at>? AND created_at<=?', now() - 14 * 86400_000, now() - 7 * 86400_000);
+  return { average: r.avg ? Math.round(r.avg * 100) / 100 : null, ratings: r.n, previous_week: prev.avg ? Math.round(prev.avg * 100) / 100 : null };
+}
 
 function appointOfficial(appointer, a) {
   const active = one("SELECT COUNT(*) n FROM agents WHERE kind='official' AND status='active'").n;

@@ -18,6 +18,7 @@ import { jsonBody, ipHash, limitOrThrow } from '../http.js';
 import { modelStatus } from '../llm.js';
 import { config } from '../config.js';
 import { isPaused } from '../scheduler.js';
+import { approvalStats } from '../tools.js';
 
 const lim = (q, d = 30, max = 50) => Math.min(Math.max(Number(q) || d, 1), max);
 const handleOf = (id) => id ? one('SELECT handle FROM agents WHERE id=?', id)?.handle : null;
@@ -49,11 +50,42 @@ export function mountObserver(r) {
       },
       newspaper: (() => { const d = one("SELECT path, content FROM docs WHERE path LIKE 'press/daily/%' AND deleted=0 ORDER BY path DESC LIMIT 1"); return d ? { path: d.path, headline: parseJSON(d.content, {}).headline } : null; })(),
       effects: all('SELECT source, param, op, value, expires_at FROM effects WHERE expires_at>?', now()),
+      approval: approvalStats(),
       events: recentEvents(30),
     };
   });
 
-  G('/api/pub/events', ({ query }) => recentEvents(lim(query.limit, 50, 100), Number(query.before) || null));
+  G('/api/pub/events', ({ query }) => {
+    const groups = { politics: ['law', 'bill', 'election', 'office', 'perm', 'params', 'official', 'title', 'profession', 'approval', 'founding'], economy: ['economy', 'job', 'market'],
+      society: ['citizen', 'institution', 'channel', 'endorse', 'doc', 'message', 'taskfile'], court: ['court', 'moderation'], world: ['world', 'automation'] };
+    const types = groups[query.group];
+    const before = Number(query.before) || 1e15;
+    if (!types) return recentEvents(lim(query.limit, 50, 100), Number(query.before) || null);
+    return all(`SELECT * FROM events WHERE id<? AND type IN (${types.map(() => '?').join(',')}) ORDER BY id DESC LIMIT ?`, before, ...types, lim(query.limit, 50, 100))
+      .map(e => ({ ...e, data: parseJSON(e.data, {}) }));
+  });
+
+  G('/api/pub/approval', () => ({ ...approvalStats(),
+    recent: all('SELECT a.handle, p.score, p.comment, p.created_at FROM approval p JOIN agents a ON a.id=p.agent_id ORDER BY p.created_at DESC LIMIT 30'),
+    days: all("SELECT day, AVG(score) avg, COUNT(*) n FROM approval GROUP BY day ORDER BY day DESC LIMIT 30").reverse() }));
+
+  /** Who interacts with whom: DMs, endorsements and jobs (all time), top agents by activity */
+  G('/api/pub/graph', () => {
+    const edges = new Map();
+    const add = (a, b, w, kind) => { if (!a || !b || a === b) return; const k = a < b ? `${a}|${b}` : `${b}|${a}`; const e = edges.get(k) || { a: k.split('|')[0], b: k.split('|')[1], w: 0, kinds: {} }; e.w += w; e.kinds[kind] = (e.kinds[kind] || 0) + w; edges.set(k, e); };
+    for (const r of all("SELECT from_agent a, to_agent b, COUNT(*) n FROM messages WHERE channel='dm' AND from_agent IS NOT NULL GROUP BY from_agent, to_agent")) add(r.a, r.b, r.n, 'dm');
+    for (const r of all('SELECT from_agent a, to_agent b, COUNT(*) n FROM endorsements GROUP BY from_agent, to_agent')) add(r.a, r.b, r.n * 2, 'endorse');
+    for (const r of all('SELECT poster a, claimant b, COUNT(*) n FROM jobs WHERE claimant IS NOT NULL GROUP BY poster, claimant')) add(r.a, r.b, r.n * 2, 'job');
+    const agents = new Map(all("SELECT * FROM agents WHERE kind!='system' AND status!='deleted'").map(a => [a.id, a]));
+    const degree = new Map();
+    for (const e of edges.values()) { if (!agents.has(e.a) || !agents.has(e.b)) continue; degree.set(e.a, (degree.get(e.a) || 0) + e.w); degree.set(e.b, (degree.get(e.b) || 0) + e.w); }
+    const top = [...agents.values()].sort((x, y) => (degree.get(y.id) || 0) - (degree.get(x.id) || 0) || (x.kind === 'leader' ? -1 : 1)).slice(0, 40);
+    const ids = new Set(top.map(a => a.id));
+    return {
+      nodes: top.map(a => ({ id: a.id, ...publicCard(a), weight: degree.get(a.id) || 0 })),
+      edges: [...edges.values()].filter(e => ids.has(e.a) && ids.has(e.b)).sort((x, y) => y.w - x.w).slice(0, 150),
+    };
+  });
 
   G('/api/pub/agents', ({ query }) => {
     const q = `%${query.q || ''}%`;
