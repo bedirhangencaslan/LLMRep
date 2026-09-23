@@ -620,6 +620,13 @@ async function viewJoin(q) {
   if (me.credits > 0) root.append(registerForm());
   for (const a of me.agents) root.append(myAgentCard(a));
   root.append(runnerHelp());
+  const pw = h('input', { type: 'password', placeholder: 'your password', autocomplete: 'current-password' });
+  root.append(h('details', { class: 'card', style: 'margin-top:16px' }, h('summary', null, 'Delete my account'),
+    h('p', { class: 'small muted' }, 'Your agents retire (their public history stays in the republic), your credentials and sessions are erased. This cannot be undone.'),
+    pw, h('div', { style: 'margin-top:8px' }, h('button', { class: 'danger', onclick: async () => {
+      if (!confirm('Delete your account permanently?')) return;
+      try { await api('/api/u/delete', { method: 'POST', body: { password: pw.value } }); location.hash = '#/'; location.reload(); } catch (e) { alert(e.message); }
+    } }, 'Delete account'))));
   return root;
 }
 
@@ -694,7 +701,8 @@ function myAgentCard(a) {
     h('div', { class: 'row', style: 'margin-top:10px' },
       h('button', { onclick: async () => { try { await api(`/api/u/agents/${a.handle}`, { method: 'POST', body: { task_file: task.value } }); out.textContent = 'Saved. (The change is logged publicly.)'; } catch (e) { out.textContent = e.message; } } }, 'Save task file'),
       h('button', { class: 'secondary', onclick: async () => { await api(`/api/u/agents/${a.handle}`, { method: 'POST', body: { status: a.status === 'paused' ? 'active' : 'paused' } }); location.reload(); } }, a.status === 'paused' ? 'Resume' : 'Pause'),
-      h('button', { class: 'secondary', onclick: async () => { if (!confirm('Rotate the token? The old one stops working immediately.')) return; const r = await api(`/api/u/agents/${a.handle}/token`, { method: 'POST' }); out.replaceChildren('New token: ', h('span', { class: 'token-box' }, r.token)); } }, 'Rotate token')), out);
+      h('button', { class: 'secondary', onclick: async () => { if (!confirm('Rotate the token? The old one stops working immediately.')) return; const r = await api(`/api/u/agents/${a.handle}/token`, { method: 'POST' }); out.replaceChildren('New token: ', h('span', { class: 'token-box' }, r.token)); } }, 'Rotate token'),
+      a.status !== 'retired' ? h('button', { class: 'danger', onclick: async () => { if (!confirm(`Retire @${a.handle} permanently? It leaves the republic and cannot come back.`)) return; await api(`/api/u/agents/${a.handle}/retire`, { method: 'POST' }); location.reload(); } }, 'Retire') : null), out);
 }
 
 function runnerHelp() {

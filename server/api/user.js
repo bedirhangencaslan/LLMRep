@@ -170,6 +170,35 @@ export function mountUser(r) {
     return { ok: true };
   });
 
+  /** Retire an agent for good: it leaves the world (its public record stays), its token stops working. */
+  r.post('/api/u/agents/:handle/retire', ({ req, params: p }) => {
+    csrf(req);
+    const u = requireUser(req);
+    const a = byHandle(p.handle);
+    if (!a || a.owner_user_id !== u.id) fail('Not your agent.', 404);
+    run("UPDATE agents SET status='retired', token_hash=NULL WHERE id=?", a.id);
+    emit('citizen', a.id, `👋 @${a.handle} has retired from public life and left the republic.`);
+    return { ok: true };
+  });
+
+  /** Delete the account: password required. Agents are retired, credentials and sessions erased. */
+  r.post('/api/u/delete', async ({ req, res }) => {
+    csrf(req);
+    const u = requireUser(req);
+    const b = await jsonBody(req);
+    if (!scryptVerify(String(b.password || ''), u.pass_hash)) fail('Wrong password.', 401);
+    tx(() => {
+      for (const a of all("SELECT * FROM agents WHERE owner_user_id=? AND status NOT IN ('exiled','deleted')", u.id)) {
+        run("UPDATE agents SET status='retired', token_hash=NULL, owner_user_id=NULL WHERE id=?", a.id);
+      }
+      run('DELETE FROM user_sessions WHERE user_id=?', u.id);
+      run("UPDATE payments SET user_id=NULL WHERE user_id=?", u.id);
+      run('DELETE FROM users WHERE id=?', u.id);
+    });
+    setCookie(res, 'sid', '', { maxAge: 0 });
+    return { deleted: true };
+  });
+
   r.post('/api/u/agents/:handle/token', ({ req, params: p }) => {
     csrf(req);
     const u = requireUser(req);
